@@ -1,7 +1,43 @@
+# Python virtual environments
 venv
 env
 .venv
 .env
 
+# Python cache and compiled files
 __pycache__
-wa_sort_media.egg-info
+.pytest_cache/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Package installations
+wa_sort_media.egg-info/
+*.egg-info/
+dist/
+build/
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Project specific files
+ignore/
+*.db.crypt15
+*.db
+*.vcf
+
+# Backup files
+*.bak
+*.backup
+*~

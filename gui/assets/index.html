@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp Media Suite</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <style type="text/tailwindcss">
+        @theme {
+            --color-background: #ece5dd;
+            --color-primary: #128c7e;
+            --color-primary-dark: #0f6b5f;
+            --color-success: #25d366;
+            --color-text: #111111;
+            --color-text-light: #667781;
+            --color-border: #d0d0d0;
+            --color-card: #ffffff;
+            --color-info-bg: #f0f5f4;
+            --color-progress-bg: #f0f0f0;
+            --color-danger: #dc2626;
+            --color-danger-dark: #c41010;
+            --color-status-success: #dcf8c6;
+            --color-status-error: #fde2e4;
+            --color-status-warning: #fff3cd;
+            --color-status-info: #d1ecf1;
+        }
+        
+        body {
+            background-color: var(--color-background);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        
+        .fixed-aspect {
+            aspect-ratio: 9/16;
+            height: 100vh;
+        }
+        
+        .slide-in {
+            animation: slideIn 0.4s ease-out forwards;
+        }
+        
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(12px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+    </style>
+</head>
+
+<body class="flex items-center justify-center p-0 m-0 h-screen bg-background">
+    <div class="fixed-aspect w-full max-w-[500px] bg-background flex flex-col">
+        <!-- Header -->
+        <div class="bg-primary text-white p-4 flex-shrink-0 border-b border-[#e0e0e0]">
+            <h1 class="text-xl font-medium m-0 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
+                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path
+                        d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                    <line x1="12" y1="22.08" x2="12" y2="12" />
+                </svg>
+                WhatsApp Media Suite
+            </h1>
+            <p class="text-xs opacity-80 mt-1 mb-0">Complete backup & organization workflow</p>
+        </div>
+
+        <!-- Content Area -->
+        <div class="flex-1 overflow-y-auto p-6 flex flex-col" id="app-content">
+            <!-- Workflow Stepper -->
+            <div class="flex items-center justify-center mb-8 py-4">
+                <div class="flex flex-col items-center cursor-pointer opacity-100 transition-opacity duration-300"
+                    onclick="showStep(1)" data-step="1">
+                    <div
+                        class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-semibold text-base mb-2 transition-colors duration-300">
+                        1</div>
+                    <div class="text-xs text-text-light font-medium">Backup</div>
+                </div>
+                <div class="w-15 h-0.5 bg-border mx-2 mb-6"></div>
+                <div class="flex flex-col items-center cursor-pointer opacity-50 transition-opacity duration-300"
+                    onclick="showStep(2)" data-step="2">
+                    <div
+                        class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-semibold text-base mb-2 transition-colors duration-300">
+                        2</div>
+                    <div class="text-xs text-text-light font-medium">Contacts</div>
+                </div>
+                <div class="w-15 h-0.5 bg-border mx-2 mb-6"></div>
+                <div class="flex flex-col items-center cursor-pointer opacity-50 transition-opacity duration-300"
+                    onclick="showStep(3)" data-step="3">
+                    <div
+                        class="w-10 h-10 rounded-full bg-primary text-white flex items-center justify-center font-semibold text-base mb-2 transition-colors duration-300">
+                        3</div>
+                    <div class="text-xs text-text-light font-medium">Organize</div>
+                </div>
+            </div>
+
+            <!-- STEP 1: BACKUP -->
+            <div class="flex flex-col flex-1 active" id="page-backup">
+                <h2 class="text-lg text-text mb-2">Step 1: Backup WhatsApp Media</h2>
+                <p class="text-sm text-text-light mb-6 leading-normal">Connect your phone via USB and back up all
+                    WhatsApp media files</p>
+
+                <div class="mb-7 opacity-0 slide-in" style="animation-delay: 0.05s;">
+                    <label class="block text-sm font-medium text-text mb-2">Device</label>
+                    <div class="flex gap-2">
+                        <select id="device-select"
+                            class="flex-1 p-3 border border-border rounded text-sm font-inherit transition-all duration-200 focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(18,140,126,0.1)] appearance-none bg-card cursor-pointer bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22%3E%3Cpath fill=%22%23128c7e%22 d=%22M6 9L1 4h10z%22/%3E%3C/svg%3E')] bg-no-repeat bg-[right_12px_center] pr-9">
+                            <option value="">Choose a device...</option>
+                        </select>
+                        <button
+                            class="w-11 h-11 p-0 flex items-center justify-center bg-card text-primary border border-primary rounded text-lg cursor-pointer transition-all duration-200 hover:bg-[#f0f5f4]"
+                            onclick="refreshDevices()" title="Refresh">↻</button>
+                    </div>
+                    <div class="status hidden p-3 rounded text-sm mt-2 leading-normal" id="device-status"></div>
+                </div>
+
+                <div class="mb-7 opacity-0 slide-in" style="animation-delay: 0.1s;">
+                    <label class="block text-sm font-medium text-text mb-2">Backup Location</label>
+                    <input type="text" id="backup-path"
+                        class="w-full p-3 border border-border rounded text-sm font-inherit transition-all duration-200 focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(18,140,126,0.1)] bg-card mb-2"
+                        placeholder="Click browse to select..." readonly>
+                    <button
+                        class="bg-card text-primary border border-primary py-3 px-4 text-sm cursor-pointer transition-all duration-200 hover:bg-[#f0f5f4]"
+                        onclick="browsePath()">Browse Folder</button>
+                </div>
+
+                <div class="hidden mt-4 mb-4 p-4 bg-card rounded border border-border" id="progress-container">
+                    <div class="text-sm font-semibold text-primary mb-2" id="progress-percentage">0%</div>
+                    <div class="bg-progress-bg rounded h-6 overflow-hidden mb-3 relative">
+                        <div class="h-full bg-gradient-to-r from-primary to-success transition-width duration-300 flex items-center pl-2 text-xs font-semibold text-white"
+                            id="progress-bar-fill" style="width: 0%"></div>
+                    </div>
+                    <div class="text-xs text-text-light leading-normal max-h-[150px] overflow-y-auto p-3 bg-[#f5f5f5] rounded mb-3 font-['Consolas','Monaco','Menlo',monospace] whitespace-pre-wrap"
+                        id="progress-text"></div>
+                    <button
+                        class="bg-danger text-white w-full py-3 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-danger-dark"
+                        onclick="cancelBackup()">Cancel Backup</button>
+                </div>
+
+                <button
+                    class="bg-primary text-white w-full py-3 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-primary-dark disabled:bg-border disabled:text-[#999999] disabled:cursor-not-allowed"
+                    id="start-btn" onclick="startBackup()" disabled>Start Backup</button>
+            </div>
+
+            <!-- STEP 2: CONTACTS -->
+            <div class="hidden flex-col flex-1" id="page-contacts">
+                <h2 class="text-lg text-text mb-2">Step 2: Backup Contacts</h2>
+                <p class="text-sm text-text-light mb-6 leading-normal">Ensure your contacts are safely backed up to
+                    Google</p>
+
+                <div class="bg-info-bg border-l-4 border-primary rounded p-4 mb-6">
+                    <h4 class="text-sm font-semibold text-text mb-2">📱 Why backup contacts?</h4>
+                    <p class="text-sm text-text-light leading-relaxed m-0">Your WhatsApp contacts are stored on your
+                        phone. Backing them up to Google Contacts ensures you never lose them.</p>
+                </div>
+
+                <div class="mb-7 opacity-0 slide-in" style="animation-delay: 0.05s;">
+                    <h4 class="text-sm font-semibold text-text mb-3">Enable Contact Sync on Your Phone</h4>
+                    <ol class="text-sm text-text-light leading-relaxed list-decimal ml-5">
+                        <li class="mb-2">Open <strong>Settings</strong> on your Android phone</li>
+                        <li class="mb-2">Go to <strong>Accounts</strong> → <strong>Google</strong></li>
+                        <li class="mb-2">Select your Google account</li>
+                        <li class="mb-2">Turn on <strong>Contacts</strong> sync</li>
+                        <li class="mb-2">Tap <strong>Sync now</strong></li>
+                    </ol>
+                </div>
+
+                <div class="mb-7 opacity-0 slide-in" style="animation-delay: 0.1s;">
+                    <h4 class="text-sm font-semibold text-text mb-3">Access Your Backed-Up Contacts</h4>
+                    <p class="text-sm text-text-light mb-3 leading-normal">Once synced, you can access your contacts
+                        from any device:</p>
+                    <a href="https://contacts.google.com" target="_blank"
+                        class="bg-primary text-white py-3 px-6 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-primary-dark inline-block text-center no-underline"
+                        style="text-decoration: none;">Open Google Contacts →</a>
+                </div>
+
+                <button
+                    class="bg-card text-primary border border-primary py-3 px-4 text-sm cursor-pointer transition-all duration-200 hover:bg-[#f0f5f4]"
+                    onclick="showStep(3)">Continue to Organization →</button>
+            </div>
+
+            <!-- STEP 3: ORGANIZE -->
+            <div class="hidden flex-col flex-1" id="page-organizer">
+                <h2 class="text-lg text-text mb-2">Step 3: Organize Media by Contact</h2>
+                <p class="text-sm text-text-light mb-6 leading-normal">Sort your backed-up media into folders by contact
+                    name</p>
+
+                <div class="bg-info-bg border-l-4 border-primary rounded p-4 mb-6">
+                    <h4 class="text-sm font-semibold text-text mb-2">🗂️ What this does</h4>
+                    <p class="text-sm text-text-light leading-relaxed m-0">Uses your WhatsApp database to match media
+                        files with contacts and organize them into individual folders for each conversation.</p>
+                </div>
+
+                <div class="mb-7 opacity-0 slide-in" style="animation-delay: 0.05s;">
+                    <label class="block text-sm font-medium text-text mb-2">Database File (msgstore.db.crypt15)</label>
+                    <input type="text" id="db-path"
+                        class="w-full p-3 border border-border rounded text-sm font-inherit transition-all duration-200 focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(18,140,126,0.1)] bg-card mb-2"
+                        placeholder="Select database file..." readonly>
+                    <button
+                        class="bg-card text-primary border border-primary py-3 px-4 text-sm cursor-pointer transition-all duration-200 hover:bg-[#f0f5f4]"
+                        onclick="browseDbFile()">Browse Database</button>
+                </div>
+
+                <div class="mb-7 opacity-0 slide-in" style="animation-delay: 0.1s;">
+                    <label class="block text-sm font-medium text-text mb-2">Media Folder</label>
+                    <input type="text" id="media-path"
+                        class="w-full p-3 border border-border rounded text-sm font-inherit transition-all duration-200 focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(18,140,126,0.1)] bg-card mb-2"
+                        placeholder="Select media folder..." readonly>
+                    <button
+                        class="bg-card text-primary border border-primary py-3 px-4 text-sm cursor-pointer transition-all duration-200 hover:bg-[#f0f5f4]"
+                        onclick="browseMediaPath()">Browse Media</button>
+                </div>
+
+                <div class="mb-7 opacity-0 slide-in" style="animation-delay: 0.15s;">
+                    <label class="block text-sm font-medium text-text mb-2">Output Folder</label>
+                    <input type="text" id="output-path"
+                        class="w-full p-3 border border-border rounded text-sm font-inherit transition-all duration-200 focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(18,140,126,0.1)] bg-card mb-2"
+                        placeholder="Where to save organized media..." readonly>
+                    <button
+                        class="bg-card text-primary border border-primary py-3 px-4 text-sm cursor-pointer transition-all duration-200 hover:bg-[#f0f5f4]"
+                        onclick="browseOutputPath()">Browse Output</button>
+                </div>
+
+                <div class="hidden mt-4 mb-4 p-4 bg-card rounded border border-border" id="org-progress-container">
+                    <div class="text-sm font-semibold text-primary mb-2" id="org-percentage">0%</div>
+                    <div class="bg-progress-bg rounded h-6 overflow-hidden mb-3 relative">
+                        <div class="h-full bg-gradient-to-r from-primary to-success transition-width duration-300 flex items-center pl-2 text-xs font-semibold text-white"
+                            id="org-bar-fill" style="width: 0%"></div>
+                    </div>
+                    <div class="text-xs text-text-light leading-normal max-h-[150px] overflow-y-auto p-3 bg-[#f5f5f5] rounded mb-3 font-['Consolas','Monaco','Menlo',monospace] whitespace-pre-wrap"
+                        id="org-text"></div>
+                    <button
+                        class="bg-danger text-white w-full py-3 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-danger-dark"
+                        onclick="cancelOrganization()">Cancel</button>
+                </div>
+
+                <button
+                    class="bg-primary text-white w-full py-3 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-primary-dark disabled:bg-border disabled:text-[#999999] disabled:cursor-not-allowed"
+                    id="organize-btn" onclick="startOrganization()" disabled>Start Organization</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+
+</html>
