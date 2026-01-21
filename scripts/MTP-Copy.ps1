@@ -159,6 +159,7 @@ if ($null -ne $mediaFolderObj) {
         foreach ($folderName in $targetMediaFolders) {
             $folderItem = $mediaItems | Where-Object { $_.Name -eq $folderName }
             if ($null -ne $folderItem) {
+                Write-Host "[LOG] Counting files in '$folderName'..."
                 $count = Count-MTPFiles -SourceFolderItem $folderItem
                 $script:totalFiles += $count
                 Write-Host "[LOG] '$folderName' has $count files"
@@ -177,7 +178,7 @@ if ($null -ne $mediaFolderObj) {
         foreach ($folderName in $targetMediaFolders) {
             $folderItem = $mediaItems | Where-Object { $_.Name -eq $folderName }
             if ($null -ne $folderItem) {
-                $destSub = Join-Path $absoluteDest $folderName
+                $destSub = Join-Path $absoluteDest "Media" $folderName
                 Write-Host "[LOG] Copying folder '$folderName' to '$destSub'..."
                 Copy-MTPFolderRecursive -SourceFolderItem $folderItem -DestPath $destSub -FolderName $folderName
             } else {

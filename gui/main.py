@@ -9,12 +9,11 @@ from gui.api import BackupAPI
 
 def get_base_path():
     """Get the base path for bundled resources."""
-    if getattr(sys, "frozen", False):
-        # Running as compiled executable - use _MEIPASS for bundled files
-        return Path(getattr(sys, "_MEIPASS", sys.executable))
-    else:
-        # Running as script
-        return Path(__file__).parent.parent
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        return Path(sys._MEIPASS)
+
+    return Path(__file__).resolve().parent.parent
 
 
 def print_tree(path: Path, prefix: str = "", max_depth: int = 3, current_depth: int = 0) -> None:
@@ -42,7 +41,7 @@ def main():
 
     # Get the path to assets directory
     base_path = get_base_path()
-    assets_dir = base_path / "assets"
+    assets_dir = base_path / "gui" / "assets"
 
     # Debug: Print directory structure
     # print("\n=== DEBUG: Path Information ===")

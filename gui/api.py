@@ -15,27 +15,75 @@ warnings.filterwarnings("ignore")
 
 def get_base_path():
     """Get the base path for bundled resources."""
-    if getattr(sys, "frozen", False):
-        # Running as compiled executable
-        return Path(getattr(sys, "_MEIPASS", sys.executable))
-    else:
-        # Running as script
-        return Path(__file__).parent.parent
+    if getattr(sys, "frozen", False) and hasattr(sys, "_MEIPASS"):
+        # PyInstaller creates a temp folder and stores path in _MEIPASS
+        return Path(sys._MEIPASS)
+
+    return Path(__file__).resolve().parent.parent
 
 
 class BackupAPI:
     """API class exposed to JavaScript"""
 
     def __init__(self):
+        self._window = None
         self.backup_task = None
         self.running = False
-        self.window = None
         self.total_files = 0
         self.processed_files = 0
 
     def set_window(self, window: Any) -> None:
         """Set reference to webview window"""
-        self.window = window
+        self._window = window
+
+    def decrypt_database(self, crypt_file: str, encryption_key: str) -> dict[str, Any]:
+        """Decrypt WhatsApp database using wa-crypt-tools library"""
+        try:
+            from pathlib import Path
+            from wa_crypt_tools.lib.key.keyfactory import KeyFactory
+            from wa_crypt_tools.lib.db.dbfactory import DatabaseFactory
+            import zlib
+
+            crypt_path = Path(crypt_file)
+            decrypted_path = crypt_path.parent / "msgstore.db"
+
+            # Clean the encryption key (remove spaces)
+            key_str = encryption_key.replace(" ", "").strip()
+
+            if len(key_str) != 64:
+                return {"success": False, "error": "Encryption key must be exactly 64 characters"}
+
+            # Create key from the 64-digit hex string
+            key = KeyFactory.from_hex(key_str)
+
+            # Load the encrypted database
+            with open(crypt_path, "rb") as f:
+                db = DatabaseFactory.from_file(f)
+
+            # Read encrypted data and decrypt
+            with open(crypt_path, "rb") as f:
+                encrypted_data = f.read()
+                decrypted_data = db.decrypt(key, encrypted_data)
+
+            # Write decrypted data
+            with open(decrypted_path, "wb") as f:
+                f.write(decrypted_data)
+
+            return {
+                "success": True,
+                "decrypted_path": str(decrypted_path),
+            }
+        except ImportError as e:
+            return {
+                "success": False,
+                "error": f"Import error: {str(e)}. Make sure wa-crypt-tools is installed in the current environment.",
+            }
+        except ValueError as e:
+            return {"success": False, "error": f"Invalid encryption key: {str(e)}"}
+        except FileNotFoundError as e:
+            return {"success": False, "error": f"File not found: {str(e)}"}
+        except Exception as e:
+            return {"success": False, "error": f"Decryption failed: {type(e).__name__}: {str(e)}"}
 
     def get_devices(self):
         """Get list of connected MTP devices"""
@@ -62,8 +110,7 @@ class BackupAPI:
     def start_backup(self, device: str, destination: str) -> dict[str, Any]:
         """Start backup task"""
         try:
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_folder = Path(destination) / f"WhatsApp_Backup_{timestamp}"
+            backup_folder = Path(destination)
             backup_folder.mkdir(parents=True, exist_ok=True)
 
             self.running = True
@@ -104,36 +151,42 @@ class BackupAPI:
                 line = self.backup_task.stdout.readline()
                 if line:
                     line = line.strip()
+
                     # Parse progress markers from PowerShell script
                     if "[PROGRESS]" in line:
                         try:
                             # Extract progress info: [PROGRESS] current/total
                             progress_part = line.split("[PROGRESS]")[1].strip()
                             if "/" in progress_part:
-                                parts = progress_part.split()[0].split("/")
-                                current = int(parts[0])
-                                total = int(parts[1])
+                                parts = progress_part.split("/")
+                                current = int(parts[0].strip())
+                                total = int(parts[1].strip())
                                 self.processed_files = current
                                 self.total_files = total
                                 percentage = (current / max(total, 1)) * 100
                             else:
                                 percentage = 0
-                        except Exception:
+                        except (ValueError, IndexError):
                             percentage = 0
 
-                        if self.window:
-                            self.window.evaluate_js(
-                                f"window.updateProgress({json.dumps(line)}, {percentage:.0f})"
+                        if self._window:
+                            # Extract just the numbers for display
+                            display_msg = f"[PROGRESS] {self.processed_files}/{self.total_files}"
+                            self._window.evaluate_js(
+                                f"window.updateProgress({json.dumps(display_msg)}, {percentage:.0f})"
                             )
                     else:
-                        if self.window:
-                            self.window.evaluate_js(f"window.updateProgress({json.dumps(line)}, 0)")
-            time.sleep(0.5)
+                        # Log messages (counting phase, folder messages, etc)
+                        if self._window:
+                            self._window.evaluate_js(
+                                f"window.updateProgress({json.dumps(line)}, 0)"
+                            )
+            time.sleep(0.1)
 
-        if self.running and self.window:
-            self.window.evaluate_js("window.backupComplete()")
-        elif not self.running and self.window:
-            self.window.evaluate_js("window.backupCanceled()")
+        if self.running and self._window:
+            self._window.evaluate_js("window.backupComplete()")
+        elif not self.running and self._window:
+            self._window.evaluate_js("window.backupCanceled()")
 
     def cancel_backup(self):
         """Cancel backup task"""
@@ -180,7 +233,9 @@ class BackupAPI:
         finally:
             root.destroy()
 
-    def start_organization(self, db_path: str, media_path: str, output_path: str) -> dict[str, Any]:
+    def start_organization(
+        self, db_path: str, media_path: str, output_path: str, contacts_path: str | None = None
+    ) -> dict[str, Any]:
         """Start media organization task using actual wasort organizer"""
         try:
             self.running = True
@@ -190,7 +245,7 @@ class BackupAPI:
             # Start organization in a separate thread
             threading.Thread(
                 target=self._organize_with_wasort,
-                args=(db_path, media_path, output_path),
+                args=(db_path, media_path, output_path, contacts_path),
                 daemon=True,
             ).start()
 
@@ -198,7 +253,9 @@ class BackupAPI:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def _organize_with_wasort(self, db_path: str, media_path: str, output_path: str) -> None:
+    def _organize_with_wasort(
+        self, db_path: str, media_path: str, output_path: str, contacts_path: str | None = None
+    ) -> None:
         """Run the actual wasort organizer"""
         from src.organizer import organize_files
 
@@ -206,10 +263,11 @@ class BackupAPI:
             db = Path(db_path)
             media = Path(media_path)
             output = Path(output_path)
+            contacts = Path(contacts_path) if contacts_path else None
 
             # Notify start
-            if self.window:
-                self.window.evaluate_js(
+            if self._window:
+                self._window.evaluate_js(
                     "window.updateOrganizerProgress('[LOG] Starting organization...', 0)"
                 )
 
@@ -219,8 +277,8 @@ class BackupAPI:
             all_files, cat_totals = scan_files(media)
             self.total_files = sum(cat_totals.values())
 
-            if self.window:
-                self.window.evaluate_js(
+            if self._window:
+                self._window.evaluate_js(
                     f"window.updateOrganizerProgress('[LOG] Found {self.total_files} files to organize', 0)"
                 )
 
@@ -233,8 +291,8 @@ class BackupAPI:
                 def update(self, cat, done_count):
                     self.count = done_count
                     pct = (self.count / max(self.api.total_files, 1)) * 100
-                    if self.api.window:
-                        self.api.window.evaluate_js(
+                    if self.api._window:
+                        self.api._window.evaluate_js(
                             f"window.updateOrganizerProgress('[PROGRESS] {self.count}/{self.api.total_files}', {pct:.0f})"
                         )
 
@@ -249,15 +307,15 @@ class BackupAPI:
                 tui=None,  # Use None instead of custom tracker due to type mismatch
             )
 
-            if self.running and self.window:
-                self.window.evaluate_js("window.organizerComplete()")
-            elif not self.running and self.window:
-                self.window.evaluate_js("window.organizerCanceled()")
+            if self.running and self._window:
+                self._window.evaluate_js("window.organizerComplete()")
+            elif not self.running and self._window:
+                self._window.evaluate_js("window.organizerCanceled()")
 
         except Exception as e:
-            if self.window:
-                self.window.evaluate_js(f"window.updateOrganizerProgress('[ERROR] {str(e)}', 0)")
-                self.window.evaluate_js("window.organizerCanceled()")
+            if self._window:
+                self._window.evaluate_js(f"window.updateOrganizerProgress('[ERROR] {str(e)}', 0)")
+                self._window.evaluate_js("window.organizerCanceled()")
 
         self.running = False
 
