@@ -1,0 +1,7 @@
+venv
+env
+.venv
+.env
+
+__pycache__
+wa_sort_media.egg-info

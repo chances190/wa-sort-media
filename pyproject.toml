@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wa-sort-media"
+version = "0.1.0"
+description = "Organize WhatsApp media files into conversation folders using msgstore and contacts exports"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*"]
+
+[project.src]
+# console entry points for convenient CLI usage
+wasort = "src.main:main"
