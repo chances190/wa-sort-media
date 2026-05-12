@@ -1,183 +1,131 @@
-"""Contacts loading utilities.
-
-Provides:
-- WaDbContacts: strict loader from wa.db requiring 'wa_contacts' table non-empty
-- VCardContacts: loader for VCF exports (VCF/VCARD). CSV support intentionally omitted.
-"""
-
-from __future__ import annotations
-
 import re
 import sqlite3
 import quopri
 from pathlib import Path
 from contextlib import closing
 
-
-class WaDbContacts:
-    """Load contacts mapping from a WhatsApp `wa.db` SQLite file."""
-
-    def __init__(self, path: Path, verbose: bool = False) -> None:
-        self.path = path
-        self.verbose = verbose
-
-    def load(self) -> dict[str, str]:
-        if not self.path.exists():
-            raise ValueError(f"wa.db not found: {self.path}")
-
-        with closing(sqlite3.connect(str(self.path))) as conn:
-            cur = conn.cursor()
-
-            # Check for the canonical table and require it
-            cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='wa_contacts'")
-            if cur.fetchone() is None:
-                raise ValueError(
-                    "'wa_contacts' table not found in wa.db. Use a Google Contacts export (VCF) via --contacts-file instead."
-                )
-
-            mapping: dict[str, str] = {}
-            cur.execute(
-                "SELECT jid, display_name, wa_name, given_name, family_name, number FROM wa_contacts"
-            )
-
-            for jid, display_name, wa_name, given_name, family_name, number in cur.fetchall():
-                # Try display_name, then wa_name, then given+family, then number
-                name = (
-                    display_name
-                    or wa_name
-                    or " ".join(filter(None, [given_name, family_name]))
-                    or number
-                )
-                if name and jid:
-                    mapping[str(jid)] = str(name).strip()
-
-        if not mapping:
-            raise ValueError(
-                "'wa_contacts' table is present but contains no contacts. "
-                "wa-db must be read from WhatsApp's rooted data directory (/data/data/com.whatsapp/...). "
-                "If you don't have a rooted device, export your contacts from Google (VCF) and use --contacts-file."
-            )
-
-        if self.verbose:
-            print(f"Loaded {len(mapping)} contacts from wa_contacts in {self.path}")
-
-        return mapping
+from .datatypes import ChatId, DisplayName, Contacts
 
 
-class VCardContacts:
-    """Parse Google Contacts exports (VCF/VCARD only) into a mapping usable for
-    resolving JIDs and phone numbers to display names.
-    """
+# ---------------------------------------------------------------------------
+# wa.db loader
+# ---------------------------------------------------------------------------
 
-    def __init__(self, path: Path, verbose: bool = False) -> None:
-        self.path = path
-        self.verbose = verbose
 
-    @staticmethod
-    def _gen_normalized_numbers(s: str) -> set[str]:
-        """Returns normalized digits-only format to match JIDs.
-        Also generates all possible country-specific variations (e.g., Brazil 55 with/without mobile 9).
-        """
-        digits = re.sub(r"\D", "", s)
-        if not digits:
-            return set()
+def load_wa_contacts(path: Path) -> Contacts:
+    """Load contacts from WhatsApp wa.db."""
 
-        keys = {digits}
+    if not path.exists():
+        raise FileNotFoundError(f"wa.db not found: {path}")
 
-        # Brazil (55): mobile numbers have a 9 prefix that WhatsApp may omit
-        # Format: +55 81 9 XXXX-XXXX or +55 81 XXXX-XXXX
-        if digits.startswith("55"):
-            if len(digits) == 13:
-                keys.add("55" + digits[2:4] + digits[5:])
-            elif len(digits) == 12:
-                keys.add("55" + digits[2:4] + "9" + digits[4:])
+    with closing(sqlite3.connect(str(path))) as conn:
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        try:
+            cur.execute("""
+                SELECT jid, display_name, wa_name
+                FROM wa_contacts
+            """)
+        except sqlite3.OperationalError as e:
+            raise ValueError("Invalid wa.db file. Use a VCF export with --contacts instead.") from e
 
-        return keys
+        contacts: Contacts = {}
+        for jid, display_name, wa_name in cur:
+            raw_name = display_name or wa_name
+            if raw_name is not None:
+                raw_name = str(raw_name).strip()
+            if raw_name and jid:
+                chat_id = str(jid).split("@", 1)[0]
+                name = str(raw_name).strip()
+                contacts[ChatId(chat_id)] = DisplayName(name)
 
-    def load(self) -> dict[str, str]:
-        if not self.path.exists():
-            raise ValueError(f"Contacts export not found: {self.path}")
+    if not contacts:
+        raise ValueError("'wa_contacts' table is empty.")
 
-        suffix = self.path.suffix.lower()
-        if suffix not in (".vcf", ".vcard"):
-            raise ValueError("Only VCF/VCARD files are supported for --contacts.")
+    return contacts
 
-        mapping: dict[str, str] = {}
 
-        def add_number(name: str, phone: str) -> None:
-            for k in self._gen_normalized_numbers(phone):
-                if k not in mapping:
-                    mapping[k] = name
+# ---------------------------------------------------------------------------
+# VCF loader
+# ---------------------------------------------------------------------------
 
-        text = self.path.read_text(encoding="utf-8", errors="replace")
 
-        # Simple robust vCard parser - split by BEGIN:VCARD
-        vcards = text.split("BEGIN:VCARD")
+class PhoneNumber(str):
+    def __new__(cls, raw: str | int):
+        digits = re.sub(r"\D", "", str(raw))
+        return super().__new__(cls, digits)
 
-        for idx, vcard_text in enumerate(vcards[1:], start=1):  # Skip first empty split
-            try:
-                lines = vcard_text.splitlines()
-                name = ""
-                phones: list[str] = []
+    def __repr__(self) -> str:
+        return f"PhoneNumber(+{super().__str__()})"
 
-                i = 0
-                while i < len(lines):
-                    # Preserve raw line for folding, then strip for content parsing
-                    raw_line = lines[i]
 
-                    # Handle line folding (continuation lines start with space/tab)
-                    while i + 1 < len(lines) and lines[i + 1] and lines[i + 1][0] in (" ", "\t"):
-                        i += 1
-                        raw_line += lines[i].lstrip()
+def load_vcf_contacts(path: Path) -> Contacts:
+    """Load contacts from a VCF file."""
 
-                    line = raw_line.strip()
+    if not path.exists():
+        raise FileNotFoundError(f"Contacts file not found: {path}")
 
-                    # Parse FN (formatted name)
-                    if line.upper().startswith("FN"):
-                        parts = line.split(":", 1)
-                        if len(parts) == 2:
-                            value = parts[1]
-                            # Handle QUOTED-PRINTABLE encoding (case-insensitive)
-                            if "QUOTED-PRINTABLE" in parts[0].upper():
-                                try:
-                                    value = quopri.decodestring(value.encode("ascii")).decode(
-                                        "utf-8", errors="replace"
-                                    )
-                                except Exception:
-                                    pass
-                            name = value.strip()
+    contacts: Contacts = {}
 
-                    # Parse TEL (phone number)
-                    elif line.upper().startswith("TEL"):
-                        parts = line.split(":", 1)
-                        if len(parts) == 2:
-                            phones.append(parts[1].strip())
+    for vcard_text in path.read_text(encoding="utf-8", errors="replace").split("BEGIN:VCARD")[1:]:
+        name, phones = _parse_vcard_entry(vcard_text)
+        for phone in phones:
+            contacts.setdefault(ChatId(phone), name)
 
-                    i += 1
+    if not contacts:
+        raise ValueError(f"No contacts with phone numbers found in {path}")
 
-                # Add all phone numbers for this contact
-                if name:
-                    for phone in phones:
-                        add_number(name, phone)
-            except Exception as e:
-                # Choke on a malformed vCard entry so user sees the offending entry index
-                raise ValueError(f"Error parsing contacts export (vCard entry {idx}): {e}")
+    return contacts
 
-        if not mapping:
-            raise ValueError(
-                f"No contacts parsed from {self.path}; ensure the file contains phone numbers."
-            )
 
-        unique_contacts: dict[str, list[str]] = {}
-        for phone, name in mapping.items():
-            if name not in unique_contacts:
-                unique_contacts[name] = []
-            unique_contacts[name].append(phone)
-        print(f"Loaded {len(unique_contacts)} contacts.")
-        if self.verbose:
-            print(f"Total phone numbers: {len(mapping)}")
-            for name in sorted(unique_contacts.keys()):
-                print(
-                    f"  {name}: {', '.join(unique_contacts[name][:3])}{' ...' if len(unique_contacts[name]) > 3 else ''}"
-                )
-        return mapping
+def _parse_vcard_entry(text: str) -> tuple[DisplayName, set[PhoneNumber]]:
+    """Parse a single vCard entry."""
+    lines = text.splitlines()
+    phones: set[PhoneNumber] = set()
+    i = 0
+    while i < len(lines):
+        raw_line = lines[i]
+        # Handle line folding
+        while i + 1 < len(lines) and lines[i + 1] and lines[i + 1][0] in (" ", "\t"):
+            i += 1
+            raw_line += lines[i].lstrip()
+
+        line = str(raw_line.strip().casefold())
+
+        if line.startswith("fn"):
+            header, name = line.split(":", 1)
+            if name:
+                if "quoted-printable" in header:
+                    try:
+                        name_bytes = name.encode("utf-8")
+                        name = quopri.decodestring(name_bytes).decode("utf-8", errors="replace")
+                    except Exception:
+                        pass
+                name = name.strip().title()
+
+        elif line.startswith("tel"):
+            _, tel = line.split(":", 1)
+            if tel:
+                variants = _get_all_jid_formats(PhoneNumber(tel))
+                phones.update(variants)
+
+        i += 1
+
+    return DisplayName(name), phones
+
+
+def _get_all_jid_formats(original: PhoneNumber) -> set[PhoneNumber]:
+    """Given a phone number, returns all possible ways WhatsApp might store it."""
+
+    variants = {original}
+
+    # Brazil (+55): WhatsApp sometimes omits the mobile 9 prefix
+    if original.startswith("55"):
+        if len(original) == 13:
+            variants.add(PhoneNumber(original[:4] + original[5:]))  # strip 9
+        elif len(original) == 12:
+            variants.add(PhoneNumber(original[:4] + "9" + original[4:]))  # add 9
+
+    # Add other country-specific normalizations here as needed
+
+    return variants

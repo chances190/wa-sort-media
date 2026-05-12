@@ -1,257 +1,123 @@
-"""Organizer: move/copy media files into conversation folders based on msgstore DB."""
+"""Organizer: move/copy media files into conversation folders."""
 
 from __future__ import annotations
+from src.contacts import PhoneNumber
 
+import logging
+import re
 import shutil
-import csv
 from pathlib import Path
-from contextlib import contextmanager
-from collections.abc import Iterator
-from typing import TextIO
 
-from .db import build_db_map, lookup_chat_name
-from .tui import BrailleMultiProgress
-
-# WhatsApp category folders
-WA_FOLDER_NAMES = {
-    "WhatsApp Images",
-    "WhatsApp Video",
-    "WhatsApp Video Notes",
-    "WhatsApp Audio",
-    "WhatsApp Voice Notes",
-    "WhatsApp Documents",
-    "WhatsApp Animated Gifs",
-    "WhatsApp Stickers",
-}
+from .datatypes import Chat, DmChat, GroupChat, MediaType, Contacts
+from .db import match_files_to_chats
 
 
-def get_category(src: Path, media_root: Path) -> str:
-    """Extract category from first folder after media_root."""
-    try:
-        first_folder = src.relative_to(media_root).parts[0]
-        return (
-            first_folder.removeprefix("WhatsApp ") if first_folder in WA_FOLDER_NAMES else "Other"
-        )
-    except (ValueError, IndexError):
-        return "Other"
+logger = logging.getLogger(__name__)
 
 
-def ensure_unique_path(dest_dir: Path, filename: str) -> Path:
-    """Find a unique path by appending _1, _2, etc if needed."""
-    dest = dest_dir / filename
-    if not dest.exists():
-        return dest
+class Organizer:
+    """Organize media files into out_dir/<chat_name>/<category>/<file>."""
 
-    stem = Path(filename).stem
-    suffix = Path(filename).suffix
-    for i in range(1, 10000):
-        candidate = dest_dir / f"{stem}_{i}{suffix}"
-        if not candidate.exists():
-            return candidate
+    def __init__(
+        self,
+        db_path: Path,
+        media_dir: Path,
+        out_dir: Path,
+        *,
+        contacts: Contacts | None = None,
+        dry_run: bool = False,
+        copy: bool = True,
+    ):
+        self.db_path = db_path.resolve()
+        self.media_dir = media_dir.resolve()
+        self.out_dir = out_dir.resolve()
+        self.contacts = contacts
+        self.dry_run = dry_run
+        self.copy = copy
 
-    raise RuntimeError(f"Could not find unique path for {filename}")
+        self.processed = 0
+        self.unmatched = 0
 
+    def run(self) -> None:
+        logger.debug("Building media map from database: %s", self.db_path)
+        chat_map = match_files_to_chats(self.db_path)
+        files = self._get_categorized_files()
+        logger.debug("Discovered %s files under media directory", len(files))
 
-@contextmanager
-def open_manifest(out_manifest: Path) -> Iterator[tuple[csv.DictWriter[str], TextIO]]:
-    """Open manifest file for appending, write header if new."""
-    first_run = not out_manifest.exists()
-    file = open(out_manifest, "a", encoding="utf-8", newline="")
-    try:
-        writer: csv.DictWriter[str] = csv.DictWriter(
-            file, fieldnames=["source", "dest", "message_row_id", "chat_row_id", "chat_name"]
-        )
-        if first_run:
-            writer.writeheader()
-        yield writer, file
-    finally:
-        file.close()
-
-
-def load_already_processed(out_manifest: Path) -> set[str]:
-    """Load set of already-processed source paths from manifest."""
-    if not out_manifest.exists():
-        return set()
-
-    with open(out_manifest, encoding="utf-8", newline="") as fh:
-        reader = csv.DictReader(fh)
-        return {row["source"] for row in reader if row.get("source")}
-
-
-def scan_files(media_root: Path) -> tuple[list[Path], dict[str, int]]:
-    """Scan media folder and return list of files + category counts."""
-    all_files: list[Path] = []
-    cat_totals: dict[str, int] = {}
-
-    for src in media_root.rglob("*"):
-        if src.is_file():
-            all_files.append(src)
-            cat = get_category(src, media_root)
-            cat_totals[cat] = cat_totals.get(cat, 0) + 1
-
-    return all_files, cat_totals
-
-
-def count_done_per_category(already_processed: set[str], media_root: Path) -> dict[str, int]:
-    """Count how many already-processed files exist per category."""
-    done_per_cat: dict[str, int] = {}
-    for src_str in already_processed:
-        cat = get_category(Path(src_str), media_root)
-        done_per_cat[cat] = done_per_cat.get(cat, 0) + 1
-    return done_per_cat
-
-
-def resolve_chat_info(
-    basename: str,
-    mapping: dict[str, list[tuple[int, int | None, str | None, int | None, str | None]]],
-    db_path: Path,
-    contacts_map: dict[str, str] | None,
-    verbose: bool,
-) -> tuple[int | None, int | None, str]:
-    """Resolve message_id, chat_id, and chat_name for a file."""
-    matches = mapping.get(basename, [])
-
-    if not matches:
-        return None, None, "unknown"
-
-    if len(matches) == 1:
-        msg_id, chat_id, *_ = matches[0]
-    else:
-        # Prefer matches with chat_row_id
-        msg_id, chat_id = None, None
-        for mid, cid, *_ in matches:
-            if cid:
-                msg_id, chat_id = mid, cid
-                break
-
-        if chat_id is None:
-            # Ambiguous - pick first and warn
-            msg_id, chat_id, *_ = matches[0]
-            if verbose:
-                print(f"Warning: multiple DB entries for {basename}; picking first: chat {chat_id}")
-
-    chat_name = (
-        lookup_chat_name(db_path, chat_id, contacts_map=contacts_map, verbose=verbose)
-        if chat_id is not None
-        else "unknown"
-    )
-
-    return msg_id, chat_id, chat_name
-
-
-def organize_files(
-    db_path: Path,
-    media_root: Path,
-    out_root: Path,
-    contacts_map: dict[str, str] | None = None,
-    *,
-    dry_run: bool = True,
-    do_move: bool = False,
-    verbose: bool = False,
-    tui: BrailleMultiProgress | None = None,
-) -> int:
-    """Organize media files into chat-based folders."""
-    mapping = build_db_map(db_path)
-    out_manifest = out_root / "wasort_manifest.csv"
-
-    # Load resume state
-    already_processed: set[str] = load_already_processed(out_manifest) if not dry_run else set()
-    if verbose and already_processed:
-        print(f"Found {len(already_processed)} already-processed files in manifest")
-
-    # Scan media folder
-    print("Scanning Media folder...")
-    all_files, cat_totals = scan_files(media_root)
-    print(f"Found {sum(cat_totals.values())} media files.")
-
-    # Count already-done per category
-    already_done_per_cat = count_done_per_category(already_processed, media_root)
-
-    if verbose:
-        for cat, count in cat_totals.items():
-            if count > 0:
-                done = already_done_per_cat.get(cat, 0)
-                print(
-                    f"  {cat}: {count} total ({count - done} remaining, {done} already processed)"
-                )
-
-    # Initialize TUI
-    if tui:
-        tui.start({k: v for k, v in cat_totals.items() if v > 0})
-        for cat, done_count in already_done_per_cat.items():
-            if cat in cat_totals and done_count > 0:
-                tui.update(cat, done_count)
-
-    # Process files
-    processed_per_cat = {k: already_done_per_cat.get(k, 0) for k in cat_totals}
-    total_new = 0
-    skipped = 0
-
-    def process_file(src: Path, writer: csv.DictWriter[str] | None, file: TextIO | None) -> None:
-        """Process a single file - nested function to access outer scope."""
-        nonlocal total_new, skipped
-
-        if str(src) in already_processed:
-            if verbose:
-                print(f"Skipping (already processed): {src}")
-            skipped += 1
+        if not files:
+            logger.info("No media files found.")
             return
 
-        total_new += 1
-        cat = get_category(src, media_root)
-        msg_id, chat_id, chat_name = resolve_chat_info(
-            src.name, mapping, db_path, contacts_map, verbose
-        )
+        total = len(files)
+        for file in files:
+            src = file[0]
+            dest = self.out_dir / self._resolve_folder_name(file, chat_map)
 
-        dest_dir = out_root / chat_name / cat
-        dest_path = dest_dir / src.name
+            if not self.dry_run:
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                if self.copy:
+                    logger.debug("Copying %s -> %s", src.name, dest)
+                    shutil.copy2(src, dest)
+                else:
+                    logger.debug("Moving %s -> %s", src.name, dest)
+                    shutil.move(src, dest)
 
-        if not dry_run:
-            dest_dir.mkdir(parents=True, exist_ok=True)
-            dest_path = ensure_unique_path(dest_dir, src.name)
+            self.processed += 1
+            logger.info("%s/%s files processed...", self.processed, total)
 
-            if do_move:
-                shutil.move(str(src), str(dest_path))
-            else:
-                shutil.copy2(str(src), str(dest_path))
+        logger.info("Done. %s files organized into %s/", self.processed, self.out_dir)
+        logger.info("Couldn't find a match for %s files.", self.processed, self.out_dir)
 
-            # Write to manifest
-            if writer and file:
-                writer.writerow(
-                    {
-                        "source": str(src),
-                        "dest": str(dest_path),
-                        "message_row_id": str(msg_id) if msg_id is not None else "",
-                        "chat_row_id": str(chat_id) if chat_id is not None else "",
-                        "chat_name": chat_name,
-                    }
-                )
-                file.flush()
+    def _get_categorized_files(self) -> list[tuple[Path, MediaType]]:
+        results: list[tuple[Path, MediaType]] = []
+        for src in self.media_dir.rglob("*"):
+            if src.is_file() and not src.name.startswith("."):
+                results.append((src, MediaType.from_path(src, self.media_dir)))
 
-        if verbose:
-            print(f"{src} -> {dest_path} (chat_id={chat_id}, name={chat_name})")
+        results.sort(key=(lambda item: item[0]))
+        return results
 
-        # Update TUI
-        processed_per_cat[cat] += 1
-        if tui:
-            tui.update(cat, processed_per_cat[cat])
+    def _resolve_folder_name(
+        self,
+        file: tuple[Path, MediaType],
+        chat_map: dict[str, Chat],
+    ) -> Path:
+        filename = file[0].name
+        media_type = file[1].value
+        chat = chat_map.get(filename)
 
-    # Main processing loop
-    if dry_run:
-        for src in all_files:
-            process_file(src, None, None)
-    else:
-        out_root.mkdir(parents=True, exist_ok=True)
-        with open_manifest(out_manifest) as (writer, file):
-            for src in all_files:
-                process_file(src, writer, file)
+        dir_name: str
+        match chat:
+            case GroupChat():
+                if chat.subject:
+                    dir_name = chat.subject
+                else:
+                    dir_name = f"Group {chat.group_id}"
+                logger.debug(f"Matched {filename} -> {dir_name} (group_id={chat.group_id})")
 
-    if tui:
-        tui.finish()
+            case DmChat():
+                if self.contacts and PhoneNumber(chat.user_id) in self.contacts:
+                    dir_name = self.contacts[chat.user_id]
+                else:
+                    dir_name = f"+{chat.user_id}"
+                logger.debug(f"Matched {filename} -> {dir_name} (chat_id={chat.user_id})")
 
-    if verbose:
-        print(f"Processed {total_new} new files, skipped {skipped} already-processed files")
-        if not dry_run:
-            print(f"Manifest written to: {out_manifest}")
+            case None:
+                dir_name = "Unmatched"
+                self.unmatched += 1
+                logger.debug("No chat match for %s", filename)
 
-    return total_new
+        return Path() / self._sanitize_dir_name(dir_name) / media_type / filename
+
+    def _sanitize_dir_name(self, name: str) -> str:
+        windows_illegal_chars = r'[<>:"/\\|?*\x00-\x1F]'
+        windows_reserved_names = r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\..*)?$"
+
+        name = re.sub(windows_illegal_chars, "_", name)
+
+        name = name.rstrip(". ")  # Strip trailing dots and spaces (forbidden in Windows)
+
+        if re.match(windows_reserved_names, name, re.IGNORECASE) or name.startswith((".", "-")):
+            name = f"_{name}"
+
+        return name[:255]
