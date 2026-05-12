@@ -1,90 +1,58 @@
-"""DB helpers: build mapping from message_media and resolve chat names."""
-
 from __future__ import annotations
 
-import sqlite3
 import os
+import sqlite3
 from pathlib import Path
 from contextlib import closing
 
-from .utils import sanitize_dir_name
+from .datatypes import Chat, DmChat, GroupChat
 
 
-def build_db_map(
-    db_path: Path,
-) -> dict[str, list[tuple[int, int | None, str | None, int | None, str | None]]]:
-    """Return a mapping from basename -> list of tuples:
-    (message_row_id, chat_row_id, file_path, file_size, file_hash)
-    """
-    mapping: dict[str, list[tuple[int, int | None, str | None, int | None, str | None]]] = {}
+def match_files_to_chats(db_path: Path) -> dict[str, Chat]:
+    """Return a mapping from filename to the chat that originated it."""
+
+    if not db_path.exists():
+        raise FileNotFoundError(f"msgstore.db not found: {db_path}")
 
     with closing(sqlite3.connect(str(db_path))) as conn:
         conn.row_factory = sqlite3.Row
         cur = conn.cursor()
+        try:
+            cur.execute("""
+                SELECT
+                    media.file_path,
+                    jid.user,
+                    jid.server,
+                    chat.subject
+                FROM message_media media
+                    JOIN message ON media.message_row_id = message._id
+                    JOIN chat ON message.chat_row_id = chat._id
+                    JOIN jid ON chat.jid_row_id = jid._id
+                WHERE media.file_path IS NOT NULL
+            """)
+        except sqlite3.OperationalError as e:
+            raise ValueError("Invalid WhatsApp database.") from e
 
-        cur.execute(
-            """
-            SELECT mm.message_row_id, m.chat_row_id, mm.file_path, mm.file_size, mm.file_hash
-            FROM message_media mm
-            LEFT JOIN message m ON mm.message_row_id = m._id
-            WHERE mm.file_path IS NOT NULL
-            """
-        )
+        mapping: dict[str, Chat] = {}
+        for row in cur:
+            basename = os.path.basename(row["file_path"])
+            user = row["user"]
+            server = row["server"]
 
-        for row in cur.fetchall():
-            file_path = row["file_path"]
-            if not file_path:
-                continue
-            basename = os.path.basename(file_path)
-            mapping.setdefault(basename, []).append(
-                (
-                    row["message_row_id"],
-                    row["chat_row_id"],
-                    row["file_path"],
-                    row["file_size"],
-                    row["file_hash"],
-                )
-            )
+            chat: Chat
+            match server:
+                case "g.us":
+                    chat = GroupChat(
+                        group_id=user,
+                        subject=row["subject"],
+                    )
+                case "s.whatsapp.net":
+                    chat = DmChat(
+                        user_id=user,
+                    )
+                case "broadcast":
+                    continue
+
+            mapping.setdefault(basename, chat)
 
     return mapping
-
-
-def lookup_chat_name(
-    db_path: Path,
-    chat_row_id: int,
-    contacts_map: dict[str, str] | None = None,
-    verbose: bool = False,
-) -> str:
-    with closing(sqlite3.connect(str(db_path))) as conn:
-        conn.row_factory = sqlite3.Row
-        cur = conn.cursor()
-
-        cur.execute("SELECT subject, jid_row_id FROM chat WHERE _id = ?", (chat_row_id,))
-        r = cur.fetchone()
-        if not r or not r["jid_row_id"]:
-            return sanitize_dir_name(f"chat_{chat_row_id}")
-
-        subject = r["subject"]
-        jid_row_id = r["jid_row_id"]
-
-        cur.execute("SELECT user, server FROM jid WHERE _id = ?", (jid_row_id,))
-        j = cur.fetchone()
-        if not j:
-            return sanitize_dir_name(f"jid_{jid_row_id}")
-
-        user = j["user"]
-        server = j["server"]
-
-        # Group chat: use subject if available
-        if server and server.lower() == "g.us":
-            return sanitize_dir_name(subject or f"group_jid_{jid_row_id}")
-
-        # Person: try contacts_map first, then numeric phone
-        if user and user.isdigit():
-            if contacts_map and user in contacts_map:
-                if verbose:
-                    print(f"Resolved +{user} -> {contacts_map[user]}")
-                return sanitize_dir_name(contacts_map[user])
-            return sanitize_dir_name(f"+{user}")
-
-        return sanitize_dir_name(f"jid_{jid_row_id}")
