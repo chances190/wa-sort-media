@@ -1,6 +1,8 @@
 param(
     [string]$deviceName,
-    [string]$destinationPath
+    [string]$destinationPath,
+    [string[]]$mediaFolders = @("WhatsApp Images", "WhatsApp Video", "WhatsApp Audio", "WhatsApp Voice Notes", "WhatsApp Video Notes", "WhatsApp Documents", "WhatsApp Stickers", "WhatsApp Animated Gifs"),
+    [switch]$skipExisting
 )
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
@@ -21,8 +23,8 @@ $basePath = "Android\media\com.whatsapp\WhatsApp"
 $dbSubPath = "$basePath\Databases"
 $mediaSubPath = "$basePath\Media"
 
-# Target Folders in Media
-$targetMediaFolders = @("WhatsApp Audio", "WhatsApp Images", "WhatsApp Video", "WhatsApp Video Notes", "WhatsApp Voice Notes")
+# Target Folders in Media (selected by the caller, defaults to all)
+$targetMediaFolders = $mediaFolders
 
 # Counter for progress tracking
 $script:fileCount = 0
@@ -124,6 +126,13 @@ function Copy-MTPFolderRecursive {
             }
             Copy-MTPFolderRecursive -SourceFolderItem $it -DestPath $subDest
         } else {
+            $destFile = Join-Path $DestPath $it.Name
+            if ($skipExisting -and (Test-Path $destFile)) {
+                $script:fileCount++
+                Write-Host "[PROGRESS] $($script:fileCount)/$($script:totalFiles)"
+                Write-Host "[LOG] Skipped existing: $($it.Name)"
+                continue
+            }
             $script:fileCount++
             $percentage = if ($script:totalFiles -gt 0) { [math]::Round(($script:fileCount / $script:totalFiles) * 100) } else { 0 }
             Write-Host "[PROGRESS] $($script:fileCount)/$($script:totalFiles)"
@@ -142,7 +151,9 @@ if ($null -ne $dbFolder) {
         $dbFile = $dbItems | Where-Object { $_.Name -eq "msgstore.db.crypt15" }
         if ($null -ne $dbFile) {
             Write-Host "[LOG] Copying Database..."
-            $destFolder.CopyHere($dbFile, 20)  # 16 all yes + 4 no dialogue
+            $destDbPath = Join-Path $absoluteDest "Databases"
+            if (-not (Test-Path $destDbPath)) { New-Item -ItemType Directory -Path $destDbPath -Force | Out-Null }
+            $shell.NameSpace($destDbPath).CopyHere($dbFile, 20)  # 16 all yes + 4 no dialogue
             $script:fileCount++
         }
     }

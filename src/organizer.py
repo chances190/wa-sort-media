@@ -1,16 +1,17 @@
 """Organizer: move/copy media files into conversation folders."""
 
 from __future__ import annotations
-from src.contacts import PhoneNumber
 
 import logging
 import re
 import shutil
+from collections.abc import Callable
 from pathlib import Path
 
-from .datatypes import Chat, DmChat, GroupChat, MediaType, Contacts
-from .db import match_files_to_chats
+from src.contacts import PhoneNumber
 
+from .datatypes import Chat, Contacts, DmChat, GroupChat, MediaType
+from .db import match_files_to_chats
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class Organizer:
         contacts: Contacts | None = None,
         dry_run: bool = False,
         copy: bool = True,
+        on_progress: Callable[[int, int], None] | None = None,
     ):
         self.db_path = db_path.resolve()
         self.media_dir = media_dir.resolve()
@@ -34,6 +36,7 @@ class Organizer:
         self.contacts = contacts
         self.dry_run = dry_run
         self.copy = copy
+        self.on_progress = on_progress
 
         self.processed = 0
         self.unmatched = 0
@@ -49,6 +52,8 @@ class Organizer:
             return
 
         total = len(files)
+        self._report_progress(0, total)
+
         for file in files:
             src = file[0]
             dest = self.out_dir / self._resolve_folder_name(file, chat_map)
@@ -63,10 +68,15 @@ class Organizer:
                     shutil.move(src, dest)
 
             self.processed += 1
+            self._report_progress(self.processed, total)
             logger.info("%s/%s files processed...", self.processed, total)
 
         logger.info("Done. %s files organized into %s/", self.processed, self.out_dir)
-        logger.info("Couldn't find a match for %s files.", self.processed, self.out_dir)
+        logger.info("Couldn't find a match for %s files.", self.unmatched)
+
+    def _report_progress(self, current: int, total: int) -> None:
+        if self.on_progress is not None:
+            self.on_progress(current, total)
 
     def _get_categorized_files(self) -> list[tuple[Path, MediaType]]:
         results: list[tuple[Path, MediaType]] = []
@@ -93,14 +103,18 @@ class Organizer:
                     dir_name = chat.subject
                 else:
                     dir_name = f"Group {chat.group_id}"
-                logger.debug(f"Matched {filename} -> {dir_name} (group_id={chat.group_id})")
+                logger.debug(
+                    f"Matched {filename} -> {dir_name} (group_id={chat.group_id})"
+                )
 
             case DmChat():
                 if self.contacts and PhoneNumber(chat.user_id) in self.contacts:
                     dir_name = self.contacts[chat.user_id]
                 else:
                     dir_name = f"+{chat.user_id}"
-                logger.debug(f"Matched {filename} -> {dir_name} (chat_id={chat.user_id})")
+                logger.debug(
+                    f"Matched {filename} -> {dir_name} (chat_id={chat.user_id})"
+                )
 
             case None:
                 dir_name = "Unmatched"
@@ -115,9 +129,13 @@ class Organizer:
 
         name = re.sub(windows_illegal_chars, "_", name)
 
-        name = name.rstrip(". ")  # Strip trailing dots and spaces (forbidden in Windows)
+        name = name.rstrip(
+            ". "
+        )  # Strip trailing dots and spaces (forbidden in Windows)
 
-        if re.match(windows_reserved_names, name, re.IGNORECASE) or name.startswith((".", "-")):
+        if re.match(windows_reserved_names, name, re.IGNORECASE) or name.startswith(
+            (".", "-")
+        ):
             name = f"_{name}"
 
         return name[:255]

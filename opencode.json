@@ -1,0 +1,16 @@
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": [
+          "npx",
+          "-y",
+          "@playwright/mcp@latest",
+          "--browser",
+          "chrome"
+        ]
+      }
+    }
+  }
+}

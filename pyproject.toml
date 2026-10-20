@@ -8,14 +8,21 @@ version = "0.1.0"
 description = "Organize WhatsApp media files into conversation folders using msgstore and contacts exports"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["pywebview>=5.0"]
-
-[tool.setuptools.packages.find]
-where = ["."]
-include = ["src*", "gui*"]
+dependencies = [
+    "pywebview>=5.0",
+    "wa-crypt-tools>=0.1.0",
+]
 
 [project.scripts]
 # CLI entry point
 wasort = "src.main:main"
 # GUI entry point
 wasort-gui = "gui.main:main"
+
+[dependency-groups]
+dev = ["pytest>=8"]
+build = ["pyinstaller>=6"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "gui*"]

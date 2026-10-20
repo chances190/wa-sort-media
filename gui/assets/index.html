@@ -1,392 +1,324 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
     <title>WhatsApp Media Suite</title>
-    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <style type="text/tailwindcss">
-        @theme {
-            --color-background: #ece5dd;
-            --color-primary: #128c7e;
-            --color-primary-dark: #0f6b5f;
-            --color-success: #25d366;
-            --color-text: #111111;
-            --color-text-light: #667781;
-            --color-border: #d0d0d0;
-            --color-card: #ffffff;
-            --color-info-bg: #f0f5f4;
-            --color-progress-bg: #f0f0f0;
-            --color-danger: #dc2626;
-            --color-danger-dark: #c41010;
-            --color-status-success: #dcf8c6;
-            --color-status-error: #fde2e4;
-            --color-status-warning: #fff3cd;
-            --color-status-info: #d1ecf1;
-        }
-        
-        body {
-            background-color: var(--color-background);
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-        }
-        
-        .fixed-aspect {
-            aspect-ratio: 9/16;
-            height: 100vh;
-        }
-        
-        .slide-in {
-            animation: slideIn 0.4s ease-out forwards;
-        }
-        
-        @keyframes slideIn {
-            from {
-                opacity: 0;
-                transform: translateY(12px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
-        }
-        
-        .status {
-            background-color: var(--color-status-info);
-            border-left: 4px solid var(--color-primary);
-        }
-        
-        .status.success {
-            background-color: var(--color-status-success);
-            border-left-color: var(--color-success);
-        }
-        
-        .status.error {
-            background-color: var(--color-status-error);
-            border-left-color: var(--color-danger);
-        }
-        
-        .status.warning {
-            background-color: var(--color-status-warning);
-            border-left-color: #ffc107;
-        }
-        
-        .skeleton {
-            background: linear-gradient(90deg, #e0e0e0 25%, #f0f0f0 50%, #e0e0e0 75%);
-            background-size: 200% 100%;
-            animation: skeleton-loading 1.5s infinite;
-        }
-        
-        @keyframes skeleton-loading {
-            0% {
-                background-position: 200% 0;
-            }
-            100% {
-                background-position: -200% 0;
-            }
-        }
-    </style>
+
+    <link rel="stylesheet" href="tailwind.css">
 </head>
 
-<body class="flex items-center justify-center p-0 m-0 h-screen bg-background">
-    <div class="fixed-aspect w-full max-w-[500px] bg-background flex flex-col">
-        <!-- Header -->
-        <div class="bg-primary text-white p-4 flex-shrink-0 border-b border-[#e0e0e0]">
-            <h1 class="text-xl font-medium m-0 flex items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none"
-                    stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path
-                        d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-                    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-                    <line x1="12" y1="22.08" x2="12" y2="12" />
-                </svg>
-                WhatsApp Media Suite
-            </h1>
-            <p class="text-xs opacity-80 mt-1 mb-0">Complete backup & organization workflow</p>
-        </div>
+<body class="m-0">
+    <div class="flex min-h-[100dvh] items-center justify-center sm:p-6">
+        <main
+            class="relative flex h-[100dvh] w-full max-w-[560px] flex-col overflow-hidden bg-[var(--c-bg)] sm:h-[min(880px,calc(100dvh-3rem))] sm:rounded-[28px] sm:shadow-[0_24px_70px_-24px_rgba(6,32,36,.4)] sm:ring-1 sm:ring-black/5">
 
-        <!-- Content Area -->
-        <div class="flex-1 overflow-y-auto p-6 flex flex-col" id="app-content">
-            <!-- Workflow Stepper -->
-            <div class="flex items-center justify-center gap-2 mb-8 py-4 flex-shrink-0">
-                <div class="flex flex-col items-center cursor-pointer opacity-100 transition-opacity duration-300"
-                    onclick="showStep(1)" data-step="1">
+            <!-- ================= HEADER ================= -->
+            <header class="relative flex-shrink-0 overflow-hidden bg-[var(--c-brand)] px-5 py-4 text-white sm:px-6">
+                <div class="pointer-events-none absolute -right-12 -top-16 h-44 w-44 rounded-full bg-white/10"></div>
+                <div class="pointer-events-none absolute -bottom-24 right-24 h-36 w-36 rounded-full bg-white/5"></div>
+
+                <div class="relative flex items-center gap-3">
                     <div
-                        class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-semibold text-sm mb-1 transition-colors duration-300">
-                        1</div>
-                    <div class="text-xs text-text-light font-medium text-center">Welcome</div>
-                </div>
-                <div class="w-6 h-0.5 bg-border mb-4 flex-shrink-0"></div>
-                <div class="flex flex-col items-center cursor-pointer opacity-50 transition-opacity duration-300"
-                    onclick="showStep(2)" data-step="2">
-                    <div
-                        class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-semibold text-sm mb-1 transition-colors duration-300">
-                        2</div>
-                    <div class="text-xs text-text-light font-medium text-center">Backup</div>
-                </div>
-                <div class="w-6 h-0.5 bg-border mb-4 flex-shrink-0"></div>
-                <div class="flex flex-col items-center cursor-pointer opacity-50 transition-opacity duration-300"
-                    onclick="showStep(3)" data-step="3">
-                    <div
-                        class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-semibold text-sm mb-1 transition-colors duration-300">
-                        3</div>
-                    <div class="text-xs text-text-light font-medium text-center">Decrypt</div>
-                </div>
-                <div class="w-6 h-0.5 bg-border mb-4 flex-shrink-0"></div>
-                <div class="flex flex-col items-center cursor-pointer opacity-50 transition-opacity duration-300"
-                    onclick="showStep(4)" data-step="4">
-                    <div
-                        class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-semibold text-sm mb-1 transition-colors duration-300">
-                        4</div>
-                    <div class="text-xs text-text-light font-medium text-center">Contacts</div>
-                </div>
-                <div class="w-6 h-0.5 bg-border mb-4 flex-shrink-0"></div>
-                <div class="flex flex-col items-center cursor-pointer opacity-50 transition-opacity duration-300"
-                    onclick="showStep(5)" data-step="5">
-                    <div
-                        class="w-8 h-8 rounded-full bg-primary text-white flex items-center justify-center font-semibold text-sm mb-1 transition-colors duration-300">
-                        5</div>
-                    <div class="text-xs text-text-light font-medium text-center">Organize</div>
-                </div>
-            </div>
-
-            <!-- STEP 1: WELCOME -->
-            <div class="flex flex-col flex-1 active" id="page-welcome">
-                <h2 class="text-lg text-text mb-2">WhatsApp Media Organizer</h2>
-                <p class="text-sm text-text-light mb-6 leading-normal">Complete workflow to backup, decrypt, and
-                    organize your WhatsApp media by contact</p>
-
-                <div class="bg-info-bg border-l-4 border-primary rounded p-4 mb-6">
-                    <h4 class="text-sm font-semibold text-text mb-2">📱 What this tool does</h4>
-                    <ol class="text-sm text-text-light leading-relaxed list-decimal ml-5 space-y-2">
-                        <li>Backs up WhatsApp files from your phone via USB</li>
-                        <li>Decrypts the encrypted database using your 64-digit key</li>
-                        <li>Helps you export contacts from Google</li>
-                        <li>Organizes all media into folders by contact name</li>
-                    </ol>
-                </div>
-
-                <div class="bg-status-warning border-l-4 border-[#ffc107] rounded p-4 mb-6">
-                    <h4 class="text-sm font-semibold text-text mb-2">⚠️ Before you start</h4>
-                    <ul class="text-sm text-text-light leading-relaxed list-disc ml-5 space-y-1">
-                        <li>Have your 64-digit encryption key ready (from WhatsApp Settings → Chats → Encrypted Backup)
-                        </li>
-                        <li>USB cable to connect your phone</li>
-                        <li>About 30-60 minutes depending on data size</li>
-                    </ul>
-                </div>
-
-                <button
-                    class="bg-primary text-white w-full py-3 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-primary-dark"
-                    onclick="showStep(2)">Get Started →</button>
-            </div>
-
-            <!-- STEP 2: BACKUP -->
-            <div class="hidden flex-col flex-1" id="page-backup">
-                <h2 class="text-lg text-text mb-2">Step 1: Backup WhatsApp Files</h2>
-                <p class="text-sm text-text-light mb-6 leading-normal">Connect your phone via USB and backup WhatsApp
-                    databases and media</p>
-
-                <div class="bg-info-bg border-l-4 border-primary rounded p-4 mb-6">
-                    <h4 class="text-sm font-semibold text-text mb-2">📲 Setup your phone</h4>
-                    <ol class="text-sm text-text-light leading-relaxed list-decimal ml-5 space-y-1">
-                        <li>Connect phone to computer via USB cable</li>
-                        <li>On phone: tap USB notification → select <strong>File Transfer (MTP)</strong></li>
-                        <li>Keep phone unlocked during backup</li>
-                    </ol>
-                </div>
-
-                <div class="mb-7 opacity-0 slide-in" style="animation-delay: 0.05s;">
-                    <label class="block text-sm font-medium text-text mb-2">Device</label>
-                    <div class="flex gap-2">
-                        <select id="device-select"
-                            class="flex-1 p-3 border border-border rounded text-sm font-inherit transition-all duration-200 focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(18,140,126,0.1)] appearance-none bg-card cursor-pointer bg-[url('data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 12 12%22%3E%3Cpath fill=%22%23128c7e%22 d=%22M6 9L1 4h10z%22/%3E%3C/svg%3E')] bg-no-repeat bg-[right_12px_center] pr-9">
-                            <option value="">Choose a device...</option>
-                        </select>
-                        <button
-                            class="w-11 h-11 p-0 flex items-center justify-center bg-card text-primary border border-primary rounded text-lg cursor-pointer transition-all duration-200 hover:bg-[#f0f5f4]"
-                            onclick="refreshDevices()" title="Refresh">↻</button>
+                        class="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white/15 ring-1 ring-inset ring-white/25">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"
+                            aria-hidden="true">
+                            <path
+                                d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
+                            <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
+                            <line x1="12" y1="22.08" x2="12" y2="12" />
+                        </svg>
                     </div>
-                    <div class="status hidden p-3 rounded text-sm mt-2 leading-normal" id="device-status"></div>
-                </div>
-
-                <div class="mb-7 opacity-0 slide-in" style="animation-delay: 0.1s;">
-                    <label class="block text-sm font-medium text-text mb-2">Backup Destination Folder</label>
-                    <input type="text" id="backup-path"
-                        class="w-full p-3 border border-border rounded text-sm font-inherit transition-all duration-200 focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(18,140,126,0.1)] bg-card mb-2"
-                        placeholder="Where to save backup..." readonly>
-                    <button
-                        class="bg-card text-primary border border-primary py-3 px-4 text-sm cursor-pointer transition-all duration-200 hover:bg-[#f0f5f4]"
-                        onclick="browseBackupPath()">Browse Folder</button>
-                </div>
-
-                <button
-                    class="bg-success text-white w-full py-3 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-[#1ea854] mb-4 hidden"
-                    id="skip-backup-btn" onclick="showStep(3)">✓ Use This Backup - Continue to Decryption →</button>
-
-                <div class="hidden mt-4 mb-4 p-4 bg-card rounded border border-border" id="backup-progress-container">
-                    <div class="text-sm font-semibold text-primary mb-2" id="backup-percentage">Preparing...</div>
-                    <div class="bg-progress-bg rounded h-6 overflow-hidden mb-3 relative">
-                        <div class="h-full skeleton transition-all duration-300" id="backup-bar-fill"
-                            style="width: 100%"></div>
-                    </div>
-                    <div class="text-xs text-text-light leading-normal max-h-[150px] overflow-y-auto p-3 bg-[#f5f5f5] rounded mb-3 font-['Consolas','Monaco','Menlo',monospace] whitespace-pre-wrap"
-                        id="backup-text"></div>
-                    <button
-                        class="bg-danger text-white w-full py-3 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-danger-dark"
-                        onclick="cancelBackup()">Cancel Backup</button>
-                </div>
-
-                <button
-                    class="bg-primary text-white w-full py-3 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-primary-dark disabled:bg-border disabled:text-[#999999] disabled:cursor-not-allowed"
-                    id="backup-btn" onclick="startBackup()" disabled>Start Backup</button>
-            </div>
-
-            <!-- STEP 3: DECRYPT -->
-            <div class="hidden flex-col flex-1" id="page-decrypt">
-                <h2 class="text-lg text-text mb-2">Step 2: Decrypt WhatsApp Database</h2>
-                <p class="text-sm text-text-light mb-6 leading-normal">Unlock your encrypted WhatsApp backup using your
-                    64-digit key</p>
-
-                <div class="bg-info-bg border-l-4 border-primary rounded p-4 mb-6">
-                    <h4 class="text-sm font-semibold text-text mb-2">🔐 About the 64-digit key</h4>
-                    <p class="text-sm text-text-light leading-relaxed m-0">This is the key you set up in WhatsApp
-                        Settings → Chats → Chat backup → End-to-end encrypted backup. If you don't have it, you cannot
-                        decrypt the database.</p>
-                </div>
-
-                <div class="mb-7 opacity-0 slide-in" style="animation-delay: 0.05s;">
-                    <label class="block text-sm font-medium text-text mb-2">Encrypted Database File</label>
-                    <input type="text" id="crypt-db-path"
-                        class="w-full p-3 border border-border rounded text-sm font-inherit transition-all duration-200 focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(18,140,126,0.1)] bg-card mb-2"
-                        placeholder="Auto-filled from backup or browse..." readonly>
-                    <button
-                        class="bg-card text-primary border border-primary py-3 px-4 text-sm cursor-pointer transition-all duration-200 hover:bg-[#f0f5f4]"
-                        onclick="browseCryptFile()">Browse File</button>
-                    <div class="text-xs text-text-light mt-2" id="db-auto-note">Will auto-fill after backup completes
+                    <div class="min-w-0">
+                        <h1 class="truncate text-[17px] font-semibold leading-tight tracking-[-0.01em]">
+                            WhatsApp Media Suite
+                        </h1>
+                        <p class="mt-0.5 truncate text-xs text-white/75">
+                            Backup, decrypt and organize — all on your computer
+                        </p>
                     </div>
                 </div>
+            </header>
 
-                <div class="mb-7 opacity-0 slide-in" style="animation-delay: 0.1s;">
-                    <label class="block text-sm font-medium text-text mb-2">Your 64-Digit Encryption Key</label>
-                    <textarea id="encryption-key"
-                        class="w-full p-3 border border-border rounded text-sm font-inherit transition-all duration-200 focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(18,140,126,0.1)] bg-card mb-2 font-mono text-xs"
-                        placeholder="Paste your 64-digit key here..." rows="4"></textarea>
-                    <div class="text-xs text-text-light">Key length: <span id="key-length">0</span>/64</div>
-                </div>
+            <!-- ================= STEPPER ================= -->
+            <nav aria-label="Workflow" class="flex shrink-0 items-center gap-1.5 px-5 pt-4 sm:px-6">
+                <button type="button" class="stepper-pill" data-step="1" onclick="goTo(1)">
+                    <span class="dot">1</span>
+                    <span class="truncate">Backup</span>
+                </button>
+                <span class="h-0.5 w-2 shrink-0 rounded-full bg-[var(--c-line)]" aria-hidden="true"></span>
+                <button type="button" class="stepper-pill" data-step="2" onclick="goTo(2)">
+                    <span class="dot">2</span>
+                    <span class="truncate">Decrypt</span>
+                </button>
+                <span class="h-0.5 w-2 shrink-0 rounded-full bg-[var(--c-line)]" aria-hidden="true"></span>
+                <button type="button" class="stepper-pill" data-step="3" onclick="goTo(3)">
+                    <span class="dot">3</span>
+                    <span class="truncate">Organize</span>
+                </button>
+            </nav>
 
-                <div class="hidden mt-4 mb-4 p-4 bg-card rounded border border-border" id="decrypt-progress-container">
-                    <div class="text-sm font-semibold text-primary mb-2">Decrypting database...</div>
-                    <div class="bg-progress-bg rounded h-6 overflow-hidden mb-3">
-                        <div class="h-full bg-gradient-to-r from-primary to-success animate-pulse" style="width: 100%">
+            <!-- ================= STATUS ================= -->
+            <div id="status-strip" class="status info mx-5 mt-3 hidden shrink-0 sm:mx-6" role="status"
+                aria-live="polite"></div>
+
+            <!-- ================= CONTENT ================= -->
+            <div id="content" class="flex flex-1 flex-col overflow-y-auto overscroll-contain px-5 py-5 sm:px-6 sm:py-6">
+
+                <!-- ============ STEP 1: BACKUP ============ -->
+                <section id="page-backup" class="page hidden flex-col">
+                    <h2 class="text-[19px] font-semibold tracking-[-0.01em]">Back up your phone</h2>
+                    <p class="mt-1 text-sm leading-relaxed muted">
+                        Connect your phone with a USB cable, then pick a folder to copy files into.
+                    </p>
+
+                    <div class="panel panel-notice mt-5">
+                        <h3 class="flex items-center gap-2 text-sm font-semibold">
+                            <span aria-hidden="true">📲</span> Set up your phone
+                        </h3>
+                        <ol class="mt-2 ml-4 list-decimal space-y-1 text-sm leading-relaxed muted">
+                            <li>Connect your phone with a USB cable</li>
+                            <li>Tap the USB notification and choose <strong class="font-semibold">File transfer</strong>
+                            </li>
+                            <li>Keep the phone unlocked while it works</li>
+                        </ol>
+
+                        <details class="group mt-3">
+                            <summary
+                                class="inline-flex select-none items-center gap-1.5 text-xs font-medium brand underline decoration-current/40 underline-offset-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"
+                                    stroke-linejoin="round" class="transition-transform group-open:rotate-90"
+                                    aria-hidden="true">
+                                    <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                                Phone not showing up?
+                            </summary>
+                            <ul class="ml-4 mt-2 list-disc space-y-1 text-xs leading-relaxed muted">
+                                <li>Unlock the screen — the phone won't appear while locked</li>
+                                <li>Open the USB notification and choose <strong>File transfer</strong>, not "Charging
+                                    only"</li>
+                                <li>Try another cable or port (some cables only charge)</li>
+                                <li>Tap <strong>Allow</strong> if the phone asks</li>
+                                <li>Press ↻ to look again</li>
+                            </ul>
+                        </details>
+                    </div>
+
+                    <div class="mt-5">
+                        <label for="device-select" class="mb-2 block text-sm font-medium">Device</label>
+                        <div class="flex items-stretch gap-2">
+                            <select id="device-select" class="field min-w-0 flex-1 cursor-pointer"
+                                onchange="onDeviceChange()">
+                                <option value="">Looking for phones…</option>
+                            </select>
+                            <button type="button" onclick="refreshDevices()" title="Refresh devices"
+                                aria-label="Refresh devices"
+                                class="btn btn-secondary w-11 shrink-0 px-0 text-lg leading-none">↻</button>
+                        </div>
+                        <div id="device-status" class="status info mt-2 hidden" aria-live="polite"></div>
+                    </div>
+
+                    <div class="mt-5">
+                        <label for="backup-path" class="mb-2 block text-sm font-medium">Backup destination</label>
+                        <div class="flex items-stretch gap-2">
+                            <input type="text" id="backup-path" class="field min-w-0 flex-1"
+                                placeholder="Tap Browse to choose a folder…" readonly onclick="browseBackupPath()">
+                            <button type="button" onclick="browseBackupPath()"
+                                class="btn btn-secondary shrink-0">Browse</button>
                         </div>
                     </div>
-                    <div class="text-xs text-text-light leading-normal p-3 bg-[#f5f5f5] rounded font-mono"
-                        id="decrypt-text">Processing...</div>
-                </div>
 
-                <button
-                    class="bg-primary text-white w-full py-3 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-primary-dark disabled:bg-border disabled:text-[#999999] disabled:cursor-not-allowed"
-                    id="decrypt-btn" onclick="startDecrypt()" disabled>Decrypt Database</button>
-            </div>
+                    <div class="mt-5">
+                        <span class="mb-2 block text-sm font-medium">Media to include</span>
+                        <div id="media-folders" class="grid grid-cols-2 gap-x-3 gap-y-1 text-sm muted"></div>
+                        <label class="mt-3 flex cursor-pointer items-center gap-2 text-xs muted">
+                            <input type="checkbox" id="skip-existing" class="h-4 w-4">
+                            Skip files already backed up (faster re-runs)
+                        </label>
+                    </div>
+                </section>
 
-            <!-- STEP 4: CONTACTS -->
-            <div class="hidden flex-col flex-1" id="page-contacts">
-                <h2 class="text-lg text-text mb-2">Step 3: Export Contacts (Optional)</h2>
-                <p class="text-sm text-text-light mb-6 leading-normal">Export your contacts for better contact name
-                    matching</p>
+                <!-- ============ STEP 2: DECRYPT ============ -->
+                <section id="page-decrypt" class="page hidden flex-col">
+                    <h2 class="text-[19px] font-semibold tracking-[-0.01em]">Decrypt the database</h2>
+                    <p class="mt-1 text-sm leading-relaxed muted">
+                        Paste the 64-digit key from WhatsApp to unlock the backup.
+                    </p>
 
-                <div class="bg-info-bg border-l-4 border-primary rounded p-4 mb-6">
-                    <h4 class="text-sm font-semibold text-text mb-2">👥 Why export contacts?</h4>
-                    <p class="text-sm text-text-light leading-relaxed m-0">Contacts help match phone numbers to names.
-                        Without this, folders will be named by phone number instead of contact names.</p>
-                </div>
+                    <div class="panel panel-notice mt-5">
+                        <h3 class="flex items-center gap-2 text-sm font-semibold">
+                            <span aria-hidden="true">🔐</span> About the key
+                        </h3>
+                        <p class="mt-2 text-sm leading-relaxed muted">
+                            WhatsApp → Settings → Chats → Chat backup → End-to-end encrypted backup. Without it, the
+                            database can't be decrypted.
+                        </p>
+                    </div>
 
-                <div class="mb-7 opacity-0 slide-in" style="animation-delay: 0.05s;">
-                    <h4 class="text-sm font-semibold text-text mb-3">Export from Google Contacts</h4>
-                    <ol class="text-sm text-text-light leading-relaxed list-decimal ml-5 space-y-2 mb-3">
-                        <li>Go to <a href="https://contacts.google.com" target="_blank"
-                                class="text-primary underline">contacts.google.com</a></li>
-                        <li>Click <strong>Export</strong> (in the sidebar)</li>
-                        <li>Select <strong>vCard (for iOS Contacts)</strong> format</li>
-                        <li>Click <strong>Export</strong></li>
-                    </ol>
-                </div>
-
-                <div class="mb-7 opacity-0 slide-in" style="animation-delay: 0.1s;">
-                    <label class="block text-sm font-medium text-text mb-2">Contacts File (contacts.vcf)</label>
-                    <input type="text" id="contacts-path"
-                        class="w-full p-3 border border-border rounded text-sm font-inherit transition-all duration-200 focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(18,140,126,0.1)] bg-card mb-2"
-                        placeholder="Optional - select contacts.vcf file..." readonly>
-                    <button
-                        class="bg-card text-primary border border-primary py-3 px-4 text-sm cursor-pointer transition-all duration-200 hover:bg-[#f0f5f4]"
-                        onclick="browseContactsFile()">Browse Contacts File</button>
-                    <div class="text-xs text-text-light mt-2">Skip if you don't have contacts exported</div>
-                </div>
-
-                <button
-                    class="bg-primary text-white w-full py-3 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-primary-dark"
-                    onclick="showStep(5)">Continue to Organization →</button>
-            </div>
-
-            <!-- STEP 5: ORGANIZE -->
-            <div class="hidden flex-col flex-1" id="page-organize">
-                <h2 class="text-lg text-text mb-2">Step 4: Organize Media by Contact</h2>
-                <p class="text-sm text-text-light mb-6 leading-normal">Final step - organize your media into folders by
-                    contact</p>
-
-                <div class="bg-info-bg border-l-4 border-primary rounded p-4 mb-6">
-                    <h4 class="text-sm font-semibold text-text mb-2">🗂️ What happens next</h4>
-                    <p class="text-sm text-text-light leading-relaxed m-0">Your media will be organized into folders by
-                        contact name, with subfolders for different media types (Images, Videos, Audio, Documents).</p>
-                </div>
-
-                <div class="mb-7 opacity-0 slide-in" style="animation-delay: 0.05s;">
-                    <label class="block text-sm font-medium text-text mb-2">Output Folder</label>
-                    <input type="text" id="output-path"
-                        class="w-full p-3 border border-border rounded text-sm font-inherit transition-all duration-200 focus:outline-none focus:border-primary focus:shadow-[0_0_0_2px_rgba(18,140,126,0.1)] bg-card mb-2"
-                        placeholder="Where to save organized media..." readonly>
-                    <button
-                        class="bg-card text-primary border border-primary py-3 px-4 text-sm cursor-pointer transition-all duration-200 hover:bg-[#f0f5f4]"
-                        onclick="browseOutputPath()">Browse Folder</button>
-                </div>
-
-                <div class="mb-7 opacity-0 slide-in" style="animation-delay: 0.1s;">
-                    <label class="block text-sm font-medium text-text mb-2">Source Folders (Auto-filled)</label>
-                    <div class="space-y-2 text-sm">
-                        <div class="flex items-center gap-2">
-                            <div class="w-2 h-2 rounded-full bg-primary"></div>
-                            <span id="auto-db-path">Database: Will auto-fill after decryption</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <div class="w-2 h-2 rounded-full bg-primary"></div>
-                            <span id="auto-media-path">Media: Will auto-fill after backup</span>
-                        </div>
-                        <div class="flex items-center gap-2">
-                            <div class="w-2 h-2 rounded-full bg-primary"></div>
-                            <span id="auto-contacts-path">Contacts: Will auto-fill if provided</span>
+                    <div class="mt-5">
+                        <label for="crypt-db-path" class="mb-2 block text-sm font-medium">Encrypted database file</label>
+                        <div class="flex items-stretch gap-2">
+                            <input type="text" id="crypt-db-path" class="field min-w-0 flex-1"
+                                placeholder="Auto-filled from backup, or tap to browse…" readonly
+                                onclick="browseCryptFile()">
+                            <button type="button" onclick="browseCryptFile()"
+                                class="btn btn-secondary shrink-0">Browse</button>
                         </div>
                     </div>
-                </div>
 
-                <div class="hidden mt-4 mb-4 p-4 bg-card rounded border border-border" id="org-progress-container">
-                    <div class="text-sm font-semibold text-primary mb-2" id="org-percentage">Preparing...</div>
-                    <div class="bg-progress-bg rounded h-6 overflow-hidden mb-3 relative">
-                        <div class="h-full skeleton transition-all duration-300" id="org-bar-fill" style="width: 100%">
+                    <div class="mt-5">
+                        <label for="encryption-key" class="mb-2 block text-sm font-medium">Your 64-digit key</label>
+                        <textarea id="encryption-key" rows="3" class="field font-mono text-xs"
+                            placeholder="Paste your 64-digit key here…" oninput="onKeyInput()"></textarea>
+                        <div class="mt-2 flex items-center justify-between gap-3">
+                            <span class="text-xs muted">
+                                Key length: <span id="key-count"
+                                    class="font-semibold tabular-nums text-[var(--c-ink)]">0</span>/64
+                            </span>
+                            <span id="key-valid" class="hidden text-xs font-semibold text-[var(--c-ok-ink)]">✓ Looks
+                                good</span>
                         </div>
-                    </div>
-                    <div class="text-xs text-text-light leading-normal max-h-[150px] overflow-y-auto p-3 bg-[#f5f5f5] rounded mb-3 font-['Consolas','Monaco','Menlo',monospace] whitespace-pre-wrap"
-                        id="org-text"></div>
-                    <button
-                        class="bg-danger text-white w-full py-3 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-danger-dark"
-                        onclick="cancelOrganization()">Cancel</button>
-                </div>
+                        <button type="button" onclick="pasteKey()" class="btn btn-secondary mt-3">Paste from
+                            clipboard</button>
 
-                <button
-                    class="bg-primary text-white w-full py-3 rounded text-sm font-medium cursor-pointer transition-all duration-200 hover:bg-primary-dark disabled:bg-border disabled:text-[#999999] disabled:cursor-not-allowed"
-                    id="organize-btn" onclick="startOrganization()" disabled>Start Organization</button>
+                        <details class="group mt-3">
+                            <summary
+                                class="inline-flex select-none items-center gap-1.5 text-xs font-medium brand underline decoration-current/40 underline-offset-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24"
+                                    fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"
+                                    stroke-linejoin="round" class="transition-transform group-open:rotate-90"
+                                    aria-hidden="true">
+                                    <polyline points="9 18 15 12 9 6" />
+                                </svg>
+                                Where do I find this key?
+                            </summary>
+                            <p class="mt-2 text-xs leading-relaxed muted">
+                                On your phone: WhatsApp → Settings → Chats → Chat backup → End-to-end encrypted backup.
+                                Choose <strong>Use a 64-digit encryption key</strong>. If you never set this up, enable
+                                it, back up again, and save the key.
+                            </p>
+                        </details>
+                    </div>
+                </section>
+
+                <!-- ============ STEP 3: ORGANIZE ============ -->
+                <section id="page-organize" class="page hidden flex-col">
+                    <h2 class="text-[19px] font-semibold tracking-[-0.01em]">Organize by contact</h2>
+                    <p class="mt-1 text-sm leading-relaxed muted">
+                        Pick an output folder. Optionally add a contacts file for nicer folder names.
+                    </p>
+
+                    <div class="mt-5">
+                        <label for="output-path" class="mb-2 block text-sm font-medium">Output folder</label>
+                        <div class="flex items-stretch gap-2">
+                            <input type="text" id="output-path" class="field min-w-0 flex-1"
+                                placeholder="Tap Browse to choose a folder…" readonly onclick="browseOutputPath()">
+                            <button type="button" onclick="browseOutputPath()"
+                                class="btn btn-secondary shrink-0">Browse</button>
+                        </div>
+                        <p id="space-info" class="mt-2 hidden text-xs muted"></p>
+                    </div>
+
+                    <div class="mt-5">
+                        <label for="contacts-path" class="mb-2 block text-sm font-medium">
+                            Contacts file <span class="font-normal muted">(optional)</span>
+                        </label>
+                        <div class="flex items-stretch gap-2">
+                            <input type="text" id="contacts-path" class="field min-w-0 flex-1"
+                                placeholder="contacts.vcf…" readonly onclick="browseContactsFile()">
+                            <button type="button" onclick="browseContactsFile()"
+                                class="btn btn-secondary shrink-0">Browse</button>
+                        </div>
+                        <p class="mt-2 text-xs leading-relaxed muted">
+                            Without contacts, folders are named by phone number. Export from
+                            <a href="https://contacts.google.com" target="_blank" rel="noopener"
+                                class="font-medium brand underline decoration-current/40 underline-offset-2">contacts.google.com</a>
+                            (vCard format).
+                        </p>
+                    </div>
+
+                    <div class="mt-5">
+                        <span class="mb-2 block text-sm font-medium">Sources</span>
+                        <ul class="panel panel-surface space-y-2.5 text-sm">
+                            <li class="flex items-start gap-2.5">
+                                <span class="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--c-brand)]"></span>
+                                <span class="muted" id="auto-db-path">Database: waiting for decryption</span>
+                            </li>
+                            <li class="flex items-start gap-2.5">
+                                <span class="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--c-brand)]"></span>
+                                <span class="muted" id="auto-media-path">Media: waiting for backup</span>
+                            </li>
+                            <li class="flex items-start gap-2.5">
+                                <span class="mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--c-brand)]"></span>
+                                <span class="muted" id="auto-contacts-path">Contacts: none — folders use phone
+                                    numbers</span>
+                            </li>
+                        </ul>
+                    </div>
+                </section>
+
+                <!-- ============ SHARED PROGRESS ============ -->
+                <section id="page-progress" class="page hidden flex-col">
+                    <div class="mb-1 flex items-baseline justify-between gap-4">
+                        <h2 id="prog-title" class="text-[19px] font-semibold tracking-[-0.01em]">Working…</h2>
+                        <span id="prog-percent"
+                            class="text-sm font-semibold tabular-nums text-[var(--c-brand)]"></span>
+                    </div>
+                    <p id="prog-file" class="truncate text-xs muted"></p>
+                    <p id="prog-eta" class="mb-4 text-xs muted"></p>
+
+                    <div class="progress-track">
+                        <div id="prog-bar" class="progress-fill"></div>
+                    </div>
+
+                    <pre id="prog-log" class="log mt-4 min-h-[160px] flex-1"></pre>
+                </section>
+
+                <!-- ============ DONE ============ -->
+                <section id="page-done" class="page hidden flex-col items-center justify-center text-center">
+                    <div
+                        class="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--c-ok-bg)] text-3xl text-[var(--c-ok-ink)]">
+                        ✓
+                    </div>
+                    <h2 class="mt-4 text-[19px] font-semibold tracking-[-0.01em]">All done</h2>
+                    <p class="mt-1 text-sm leading-relaxed muted">
+                        Your media has been organized by contact.
+                    </p>
+                    <p id="done-path" class="panel panel-surface mt-4 w-full break-all text-left text-xs muted">
+                    </p>
+                    <button type="button" onclick="openOutputFolder()" class="btn btn-secondary mt-4">Open folder</button>
+                </section>
             </div>
-        </div>
+
+            <!-- ================= FOOTER ================= -->
+            <footer
+                class="flex shrink-0 flex-col gap-3 border-t border-[var(--c-line)] bg-[var(--c-surface)] px-5 py-3 sm:px-6">
+                <div class="flex items-center justify-between gap-3 text-[11px] muted">
+                    <span class="flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none"
+                            stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                            aria-hidden="true">
+                            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                        </svg>
+                        Nothing leaves your computer
+                    </span>
+                    <button type="button" onclick="exportDiagnostics()"
+                        class="font-medium brand underline decoration-current/40 underline-offset-2">
+                        Export diagnostics
+                    </button>
+                </div>
+                <div class="flex gap-2">
+                    <button type="button" id="btn-back" onclick="goBack()" class="btn btn-secondary hidden">← Back</button>
+                    <button type="button" id="btn-primary" onclick="primaryAction()"
+                        class="btn btn-primary flex-1">Start backup</button>
+                </div>
+            </footer>
+        </main>
     </div>
 
     <script src="script.js"></script>

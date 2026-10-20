@@ -1,0 +1,41 @@
+name: Release
+
+# Builds the standalone Windows app and attaches the installer to a Release.
+# Tag a version to publish:  git tag v0.1.0 && git push --tags
+#
+# NOTE: the installer is unsigned. To avoid SmartScreen warnings, add a code
+# signing step (signtool) with a certificate stored in repo secrets.
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Build app bundle
+        run: uv run --group build pyinstaller --noconfirm --clean wa-sort-media.spec
+
+      - name: Build installer
+        run: '& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\wa-sort-media.iss'
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: WhatsAppMediaSuite-setup
+          path: installer/Output/*.exe
+
+      - name: Attach installer to release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: installer/Output/*.exe

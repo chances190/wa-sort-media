@@ -85,6 +85,9 @@ def main(argv: list[str] | None = None) -> int:
     except FileNotFoundError as e:
         logger.error("Error: %s", e)
         return 2
+    except Exception as e:  # noqa: BLE001
+        logger.error("Unexpected error: %s", e)
+        return 1
     return 0
 
 

@@ -1,0 +1,11 @@
+{
+  "name": "wa-sort-media-ui",
+  "private": true,
+  "scripts": {
+    "css": "tailwindcss -i gui/assets/tailwind.src.css -o gui/assets/tailwind.css --minify",
+    "css:watch": "tailwindcss -i gui/assets/tailwind.src.css -o gui/assets/tailwind.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4"
+  }
+}

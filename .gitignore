@@ -4,6 +4,9 @@ env
 .venv
 .env
 
+# Node.js dependencies
+node_modules/
+
 # Python cache and compiled files
 __pycache__
 .pytest_cache/
@@ -21,7 +24,12 @@ build/
 
 # PyInstaller
 *.manifest
-*.spec
+
+# Playwright preview artifacts
+.playwright-mcp/
+
+# Inno Setup build output
+installer/Output/
 
 # IDE and editor files
 .vscode/

@@ -1,722 +1,650 @@
 // ============================================================================
-// DEEPSEEK'S UX LOGIC (MERGED WITH PYWEBVIEW API)
+// WhatsApp Media Suite - frontend
+//
+// One-way flow: mutate `state`, then call render(). The DOM is always derived
+// from state, so the view, stepper and footer can't drift out of sync.
 // ============================================================================
 
-// Global state
-let currentStep = 1;
-let backupPath = '';
-let decryptedDBPath = '';
-let contactsFilePath = '';
-let mediaPath = '';
-let selectedDevice = '';
-let encryptionKey = '';
-let backupCompleted = false;
-let decryptionCompleted = false;
+const PAGES = ['backup', 'decrypt', 'organize', 'progress', 'done'];
+const STEP_VIEW = ['backup', 'decrypt', 'organize'];
 
-// Initialize page
-document.addEventListener('DOMContentLoaded', function () {
-    updateStepIndicators();
-    initializePage();
+const state = {
+    step: 1,
+    view: 'backup',
+    busy: false,
+    canceled: false,
+    opStart: 0,
+    backupPath: '',
+    mediaPath: '',
+    dbPath: '',
+    outputPath: '',
+    contactsPath: '',
+    key: '',
+    device: '',
+    backend: '',
+    devices: [],
+    backupDone: false,
+    decryptDone: false,
+};
+
+// ============================================================================
+// BOOT
+// ============================================================================
+
+document.addEventListener('DOMContentLoaded', () => {
+    if (window.pywebview && window.pywebview.api) init();
 });
+window.addEventListener('pywebviewready', init);
 
-function initializePage() {
-    // Setup key length counter
-    const encKeyInput = document.getElementById('encryption-key');
-    if (encKeyInput) {
-        encKeyInput.addEventListener('input', function (e) {
-            const key = e.target.value.replace(/\s/g, '');
-            encryptionKey = key;
-            const lengthEl = document.getElementById('key-length');
-            if (lengthEl) lengthEl.textContent = key.length;
-            updateDecryptButton();
-        });
-    }
+let initialized = false;
+async function init() {
+    if (initialized) return;
+    initialized = true;
 
-    // Setup device select handler
-    const deviceSelect = document.getElementById('device-select');
-    if (deviceSelect) {
-        deviceSelect.addEventListener('change', function (e) {
-            selectedDevice = e.target.value;
-            updateBackupButton();
-        });
-    }
-
-    // Load any saved state
-    loadSavedState();
-
-    // Animate slide-in elements
-    animateSlideIn();
-
-    // Auto-refresh devices when on backup page
-    if (currentStep === 2) {
-        refreshDevices();
-    }
-}
-
-function animateSlideIn() {
-    setTimeout(() => {
-        document.querySelectorAll('.slide-in').forEach((el, index) => {
-            setTimeout(() => {
-                el.style.opacity = '1';
-            }, index * 50);
-        });
-    }, 100);
+    await loadMediaFolders();
+    restoreState();
+    render();
+    if (state.view === 'backup') refreshDevices();
 }
 
 // ============================================================================
-// STEP NAVIGATION
+// RENDERING
 // ============================================================================
 
-function showStep(step) {
-    // Validate step transitions
-    if (step === 2 && !validateStep1()) return;
-    if (step === 3 && !validateStep2()) return;
-    if (step === 4 && !validateStep3()) return;
-    if (step === 5 && !validateStep4()) return;
-
-    // Hide all pages
-    document.querySelectorAll('[id^="page-"]').forEach(page => {
-        page.classList.add('hidden');
-        page.classList.remove('active');
+function render() {
+    PAGES.forEach((name) => {
+        const el = document.getElementById('page-' + name);
+        if (!el) return;
+        el.classList.toggle('hidden', name !== state.view);
+        el.classList.toggle('flex', name === state.view);
     });
-
-    // Show selected page
-    const pageId = `page-${getPageName(step)}`;
-    const pageEl = document.getElementById(pageId);
-    if (pageEl) {
-        pageEl.classList.remove('hidden');
-        pageEl.classList.add('active');
-    }
-
-    // Update stepper
-    currentStep = step;
-    updateStepIndicators();
-
-    // Auto-fill paths when showing a step
-    setTimeout(autoFillPaths, 100);
-
-    // Animate slide-in elements
-    animateSlideIn();
-
-    // Auto-refresh devices when entering backup page
-    if (step === 2) {
-        setTimeout(refreshDevices, 200);
-    }
+    renderStepper();
+    renderFooter();
+    const content = document.getElementById('content');
+    if (content) content.scrollTop = 0;
 }
 
-function getPageName(step) {
-    switch (step) {
-        case 1: return 'welcome';
-        case 2: return 'backup';
-        case 3: return 'decrypt';
-        case 4: return 'contacts';
-        case 5: return 'organize';
-        default: return 'welcome';
-    }
-}
-
-function updateStepIndicators() {
-    document.querySelectorAll('[data-step]').forEach(stepEl => {
-        const stepNum = parseInt(stepEl.getAttribute('data-step'));
-        const stepDot = stepEl.querySelector('.w-8');
-
-        stepEl.classList.remove('opacity-100');
-        stepEl.classList.add('opacity-50');
-
-        if (stepNum === currentStep) {
-            stepEl.classList.remove('opacity-50');
-            stepEl.classList.add('opacity-100');
-            if (stepDot) {
-                stepDot.classList.remove('bg-primary-dark', 'bg-success');
-                stepDot.classList.add('bg-primary');
-            }
-        } else if (stepNum < currentStep) {
-            stepEl.classList.remove('opacity-50');
-            stepEl.classList.add('opacity-100');
-            if (stepDot) {
-                stepDot.classList.remove('bg-primary');
-                stepDot.classList.add('bg-success');
-            }
-        }
+function renderStepper() {
+    document.querySelectorAll('.stepper-pill').forEach((btn) => {
+        const n = Number(btn.dataset.step);
+        const active = state.view === STEP_VIEW[n - 1];
+        const done = (n === 1 && state.backupDone) || (n === 2 && state.decryptDone);
+        btn.classList.toggle('is-active', active);
+        btn.classList.toggle('is-done', done && !active);
+        btn.classList.toggle('is-locked', !canEnter(n));
+        const dot = btn.querySelector('.dot');
+        if (dot) dot.textContent = done && !active ? '✓' : String(n);
     });
 }
 
-function validateStep1() {
-    return true; // Always allow going to backup step
-}
+function renderFooter() {
+    const back = document.getElementById('btn-back');
+    const primary = document.getElementById('btn-primary');
+    if (!back || !primary) return;
 
-function validateStep2() {
-    if (!backupCompleted) {
-        alert('Please complete the backup step first.');
-        return false;
+    if (state.view === 'progress') {
+        back.classList.add('hidden');
+        primary.textContent = 'Cancel';
+        primary.disabled = false;
+        primary.className = 'btn btn-danger flex-1';
+        return;
     }
-    return true;
-}
-
-function validateStep3() {
-    if (!decryptionCompleted) {
-        alert('Please complete the decryption step first.');
-        return false;
+    if (state.view === 'done') {
+        back.classList.add('hidden');
+        primary.textContent = 'Start over';
+        primary.disabled = false;
+        primary.className = 'btn btn-primary flex-1';
+        return;
     }
-    return true;
+
+    primary.className = 'btn btn-primary flex-1';
+    back.classList.toggle('hidden', state.step === 1);
+
+    if (state.step === 1) {
+        primary.textContent = 'Start backup';
+        primary.disabled = !state.device || !state.backupPath;
+    } else if (state.step === 2) {
+        primary.textContent = 'Decrypt database';
+        primary.disabled = !state.dbPath || state.key.length !== 64;
+    } else {
+        primary.textContent = 'Start organizing';
+        primary.disabled = !state.decryptDone || !state.mediaPath || !state.outputPath;
+    }
 }
 
-function validateStep4() {
-    return true; // Always allow going to organize step
+async function loadMediaFolders() {
+    const box = document.getElementById('media-folders');
+    if (!box) return;
+    let folders = [];
+    try {
+        const result = await pywebview.api.get_media_folders();
+        folders = result.folders || [];
+    } catch (error) {
+        console.error('Could not load media folders:', error);
+        return;
+    }
+    box.innerHTML = '';
+    folders.forEach((folder) => {
+        const label = document.createElement('label');
+        label.className = 'flex items-center gap-2 cursor-pointer';
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.value = folder;
+        checkbox.checked = true;
+        checkbox.className = 'h-4 w-4';
+        const span = document.createElement('span');
+        span.textContent = folder.replace('WhatsApp ', '');
+        label.append(checkbox, span);
+        box.appendChild(label);
+    });
+}
+
+function selectedFolders() {
+    return Array.from(document.querySelectorAll('#media-folders input[type=checkbox]'))
+        .filter((cb) => cb.checked)
+        .map((cb) => cb.value);
 }
 
 // ============================================================================
-// FILE BROWSING (PYWEBVIEW API INTEGRATION)
+// STATUS
 // ============================================================================
 
-async function browseBackupPath() {
-    try {
-        const result = await pywebview.api.pick_folder();
-        if (result.success && result.path) {
-            backupPath = result.path;
-            const inputEl = document.getElementById('backup-path');
-            if (inputEl) inputEl.value = result.path;
-
-            // Check if this is an existing backup (has media folder or database)
-            // If so, mark as completed and allow skipping to decrypt
-            const skipBtn = document.getElementById('skip-backup-btn');
-            if (skipBtn) {
-                skipBtn.classList.remove('hidden');
-            }
-
-            // Auto-fill decrypt page - database is now at root of backup folder
-            const cryptFile = result.path + '/msgstore.db.crypt15';
-            const cryptDbInput = document.getElementById('crypt-db-path');
-            if (cryptDbInput) cryptDbInput.value = cryptFile;
-
-            // Set media path - media is in Media subfolder
-            mediaPath = result.path + '/Media';
-
-            // Mark as completed so user can skip
-            backupCompleted = true;
-
-            updateBackupButton();
-            saveState();
-            autoFillPaths();
-        }
-    } catch (error) {
-        console.error('Folder picker error:', error);
-    }
+function setStatus(message, kind = 'info') {
+    const el = document.getElementById('status-strip');
+    if (!el) return;
+    el.textContent = message;
+    el.className = 'status mx-5 mt-3 shrink-0 sm:mx-6 ' + kind;
 }
 
-async function browseCryptFile() {
-    try {
-        const result = await pywebview.api.pick_file();
-        if (result.success && result.path) {
-            const inputEl = document.getElementById('crypt-db-path');
-            if (inputEl) inputEl.value = result.path;
-            updateDecryptButton();
-            saveState();
-        }
-    } catch (error) {
-        console.error('File picker error:', error);
-    }
-}
-
-async function browseContactsFile() {
-    try {
-        const result = await pywebview.api.pick_file();
-        if (result.success && result.path) {
-            contactsFilePath = result.path;
-            const inputEl = document.getElementById('contacts-path');
-            if (inputEl) inputEl.value = result.path;
-            saveState();
-        }
-    } catch (error) {
-        console.error('File picker error:', error);
-    }
-}
-
-async function browseOutputPath() {
-    try {
-        const result = await pywebview.api.pick_folder();
-        if (result.success && result.path) {
-            const inputEl = document.getElementById('output-path');
-            if (inputEl) inputEl.value = result.path;
-            updateOrganizeButton();
-            saveState();
-        }
-    } catch (error) {
-        console.error('Folder picker error:', error);
-    }
+function clearStatus() {
+    const el = document.getElementById('status-strip');
+    if (el) el.className = 'status mx-5 mt-3 hidden shrink-0 sm:mx-6';
 }
 
 // ============================================================================
-// STEP 2: BACKUP (PYWEBVIEW API INTEGRATION)
+// NAVIGATION
+// ============================================================================
+
+function canEnter(step) {
+    if (step === 1) return true;
+    if (step === 2) return state.backupDone;
+    if (step === 3) return state.backupDone && state.decryptDone;
+    return false;
+}
+
+function goTo(step) {
+    if (state.busy) return;
+    if (!canEnter(step)) {
+        setStatus(
+            step === 2
+                ? 'Back up first, or pick an existing backup folder.'
+                : 'Decrypt the database before organizing.',
+            'warn'
+        );
+        return;
+    }
+    state.step = step;
+    state.view = STEP_VIEW[step - 1];
+    clearStatus();
+    if (step === 3) checkSpace();
+    render();
+}
+
+function goBack() {
+    if (state.busy) return;
+    if (state.view === 'done') return startOver();
+    if (state.step > 1) goTo(state.step - 1);
+}
+
+function primaryAction() {
+    if (state.view === 'progress') return cancelOp();
+    if (state.view === 'done') return startOver();
+    if (state.step === 1) return startBackup();
+    if (state.step === 2) return startDecrypt();
+    return startOrganize();
+}
+
+// ============================================================================
+// STEP 1: BACKUP
 // ============================================================================
 
 async function refreshDevices() {
-    const deviceStatus = document.getElementById('device-status');
-    if (!deviceStatus) return;
+    const select = document.getElementById('device-select');
+    const status = document.getElementById('device-status');
+    if (!select || !status) return;
 
-    deviceStatus.classList.remove('hidden', 'success', 'error', 'warning');
-    deviceStatus.textContent = "Scanning for devices...";
-    deviceStatus.classList.add('status', 'warning');
+    status.className = 'status warn mt-2';
+    status.textContent = 'Looking for your phone…';
 
     try {
         const result = await pywebview.api.get_devices();
-        if (result && result.success && Array.isArray(result.devices) && result.devices.length > 0) {
-            const select = document.getElementById('device-select');
-            if (select) {
-                select.innerHTML = '<option value="">Choose a device...</option>';
-                result.devices.forEach(device => {
-                    const option = document.createElement('option');
-                    option.value = device;
-                    option.textContent = device;
-                    select.appendChild(option);
-                });
-            }
-            deviceStatus.textContent = `✓ Found ${result.devices.length} device(s)`;
-            deviceStatus.classList.remove('warning');
-            deviceStatus.classList.add('success');
-        } else {
-            deviceStatus.textContent = 'No devices found. Check USB connection and MTP mode.';
-            deviceStatus.classList.remove('warning');
-            deviceStatus.classList.add('warning');
-        }
+        state.devices = (result && result.devices) || [];
     } catch (error) {
-        console.error('get_devices error', error);
-        deviceStatus.textContent = `Error: ${error && error.message ? error.message : String(error)}`;
-        deviceStatus.classList.remove('warning');
-        deviceStatus.classList.add('error');
+        state.devices = [];
+        status.className = 'status err mt-2';
+        status.textContent = `Couldn't look for phones: ${error && error.message ? error.message : error}`;
+        return;
     }
+
+    select.innerHTML = '<option value="">Choose a device…</option>';
+    state.devices.forEach((device) => {
+        const option = document.createElement('option');
+        option.value = device.id;
+        option.textContent = device.label;
+        select.appendChild(option);
+    });
+
+    if (state.devices.length > 0) {
+        status.className = 'status ok mt-2';
+        status.textContent = `Found ${state.devices.length} device(s).`;
+    } else {
+        status.className = 'status err mt-2';
+        status.textContent = 'No phone found. Connect it with a USB cable, unlock it, and choose "File transfer", then press ↻.';
+    }
+    renderFooter();
 }
 
-function updateBackupButton() {
-    const btn = document.getElementById('backup-btn');
-    if (btn) {
-        btn.disabled = !selectedDevice || !backupPath;
+function onDeviceChange() {
+    const select = document.getElementById('device-select');
+    const device = state.devices.find((d) => d.id === select.value);
+    state.device = device ? device.id : '';
+    state.backend = device ? device.backend : '';
+    renderFooter();
+}
+
+async function browseBackupPath() {
+    const result = await pywebview.api.pick_folder();
+    if (!result.success || !result.path) return;
+    state.backupPath = result.path;
+    state.mediaPath = `${result.path}/Media`;
+    document.getElementById('backup-path').value = result.path;
+    const cryptInput = document.getElementById('crypt-db-path');
+    if (cryptInput && !cryptInput.value) {
+        cryptInput.value = `${result.path}/Databases/msgstore.db.crypt15`;
+        state.dbPath = cryptInput.value;
     }
+    // A browsed folder counts as a usable backup, so the user may skip ahead.
+    state.backupDone = true;
+    clearStatus();
+    autoFill();
+    saveState();
+    renderFooter();
 }
 
 async function startBackup() {
-    const btn = document.getElementById('backup-btn');
-    const progressContainer = document.getElementById('backup-progress-container');
-    const backupText = document.getElementById('backup-text');
-    const backupPercentage = document.getElementById('backup-percentage');
-    const backupBarFill = document.getElementById('backup-bar-fill');
-
-    if (!btn || !progressContainer) return;
-
-    btn.disabled = true;
-    btn.textContent = 'Backing up...';
-    progressContainer.classList.remove('hidden');
-    if (backupText) backupText.textContent = 'Starting backup...\n';
-    if (backupPercentage) backupPercentage.textContent = 'Preparing...';
-    if (backupBarFill) {
-        // Reset to skeleton state
-        backupBarFill.className = 'h-full skeleton transition-all duration-300';
-        backupBarFill.style.width = '100%';
-    }
-
+    beginProgress('Backing up…');
     try {
-        const result = await pywebview.api.start_backup(selectedDevice, backupPath);
-
-        if (result.success) {
-            // Store the backup path for later use
-            backupPath = result.backup_path;
-
-            // Auto-fill paths for next steps
-            mediaPath = result.backup_path + '/Media';
-            const cryptFile = result.backup_path + '/Databases/msgstore.db.crypt15';
-            const cryptDbInput = document.getElementById('crypt-db-path');
-            if (cryptDbInput) cryptDbInput.value = cryptFile;
-
-            // The Python monitor will call window.backupComplete() when done
-        } else {
-            if (backupText) backupText.textContent += `\n✗ Error: ${result.error}`;
-            btn.disabled = false;
-            btn.textContent = 'Start Backup';
-        }
+        const result = await pywebview.api.start_backup(
+            state.device,
+            state.backend,
+            state.backupPath,
+            selectedFolders(),
+            document.getElementById('skip-existing')?.checked || false
+        );
+        if (!result.success) throw new Error(result.error || 'Backup failed to start');
+        state.backupPath = result.backup_path;
+        state.mediaPath = `${result.backup_path}/Media`;
+        renderFooter();
     } catch (error) {
-        if (backupText) backupText.textContent += `\n✗ Error: ${error.message || String(error)}`;
-        btn.disabled = false;
-        btn.textContent = 'Start Backup';
+        onError('Backup', error.message || String(error));
     }
 }
 
-function cancelBackup() {
-    try {
-        pywebview.api.cancel_backup();
-    } catch (error) {
-        console.error('Cancel backup error:', error);
+function onBackupComplete() {
+    state.busy = false;
+    state.backupDone = true;
+    state.mediaPath = `${state.backupPath}/Media`;
+    const cryptInput = document.getElementById('crypt-db-path');
+    if (cryptInput && !cryptInput.value) {
+        cryptInput.value = `${state.backupPath}/Databases/msgstore.db.crypt15`;
+        state.dbPath = cryptInput.value;
     }
-    const container = document.getElementById('backup-progress-container');
-    if (container) container.classList.add('hidden');
-    const btn = document.getElementById('backup-btn');
-    if (btn) {
-        btn.disabled = false;
-        btn.textContent = 'Start Backup';
-    }
-}
-
-// Callback from Python for progress updates
-window.updateProgress = (message, percentage) => {
-    const textEl = document.getElementById('backup-text');
-    const barEl = document.getElementById('backup-bar-fill');
-    const percentEl = document.getElementById('backup-percentage');
-
-    // Always show log messages
-    if (textEl) {
-        textEl.textContent += message + '\n';
-        textEl.scrollTop = textEl.scrollHeight;
-    }
-
-    // If we have a percentage (actual file copying), show it
-    if (percentage !== undefined && percentage !== null && percentage > 0) {
-        if (percentEl) percentEl.textContent = `${Math.round(percentage)}%`;
-        if (barEl) {
-            // Switch from skeleton to actual progress gradient
-            barEl.classList.remove('skeleton');
-            barEl.classList.add('bg-gradient-to-r', 'from-primary', 'to-success', 'flex', 'items-center', 'pl-2', 'text-xs', 'font-semibold', 'text-white');
-            barEl.style.width = Math.round(percentage) + '%';
-        }
-    } else if (percentage === 0 && message.includes('[LOG]')) {
-        // During counting phase, show a pulsing animation to indicate activity
-        if (barEl && !barEl.classList.contains('bg-gradient-to-r')) {
-            barEl.classList.add('skeleton');  // Show skeleton animation during counting
-        }
-    }
-};
-
-// Callback from Python when backup completes
-window.backupComplete = () => {
-    const progressContainer = document.getElementById('backup-progress-container');
-    if (!progressContainer) return;
-
-    backupCompleted = true;
-
-    progressContainer.innerHTML = `
-        <div class="text-center p-4">
-            <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-green-600" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                </svg>
-            </div>
-            <h4 class="font-semibold text-green-700 mb-2">Backup Complete!</h4>
-            <p class="text-sm text-text-light mb-4">WhatsApp files have been backed up successfully</p>
-            <button class="bg-primary text-white py-2 px-6 rounded text-sm hover:bg-primary-dark" onclick="showStep(3)">
-                Continue to Decryption →
-            </button>
-        </div>
-    `;
-
+    autoFill();
     saveState();
-    autoFillPaths();
-};
-
-// Callback from Python when backup is canceled
-window.backupCanceled = () => {
-    const textEl = document.getElementById('backup-text');
-    if (textEl) {
-        textEl.textContent += '\n⚠ Backup canceled';
-    }
-    const btn = document.getElementById('backup-btn');
-    if (btn) {
-        btn.disabled = false;
-        btn.textContent = 'Start Backup';
-    }
-};
+    state.step = 2;
+    state.view = 'decrypt';
+    setStatus('Backup complete. Now decrypt the database.', 'ok');
+    render();
+}
 
 // ============================================================================
-// STEP 3: DECRYPT (PYWEBVIEW API INTEGRATION)
+// STEP 2: DECRYPT
 // ============================================================================
 
-function updateDecryptButton() {
-    const btn = document.getElementById('decrypt-btn');
-    const cryptPath = document.getElementById('crypt-db-path')?.value;
-    const keyValid = encryptionKey.replace(/\s/g, '').length === 64;
-    if (btn) {
-        btn.disabled = !cryptPath || !keyValid;
+async function browseCryptFile() {
+    const result = await pywebview.api.pick_file('database');
+    if (!result.success || !result.path) return;
+    state.dbPath = result.path;
+    document.getElementById('crypt-db-path').value = result.path;
+    clearStatus();
+    saveState();
+    renderFooter();
+}
+
+function onKeyInput() {
+    state.key = document.getElementById('encryption-key').value.replace(/\s/g, '');
+    document.getElementById('key-count').textContent = state.key.length;
+    document.getElementById('key-valid').classList.toggle('hidden', state.key.length !== 64);
+    renderFooter();
+}
+
+async function pasteKey() {
+    const textarea = document.getElementById('encryption-key');
+    try {
+        const text = await navigator.clipboard.readText();
+        if (!text) return;
+        textarea.value = text.replace(/\s/g, '');
+        onKeyInput();
+    } catch (error) {
+        textarea.focus();
+        setStatus('Could not read the clipboard — paste with Ctrl+V.', 'warn');
     }
 }
 
 async function startDecrypt() {
-    const btn = document.getElementById('decrypt-btn');
-    const progressContainer = document.getElementById('decrypt-progress-container');
-    const decryptText = document.getElementById('decrypt-text');
-    const cryptPath = document.getElementById('crypt-db-path')?.value;
-
-    if (!btn || !progressContainer || !cryptPath) return;
-
-    btn.disabled = true;
-    progressContainer.classList.remove('hidden');
-    if (decryptText) decryptText.textContent = 'Starting decryption...';
-
+    beginProgress('Decrypting database…');
+    document.getElementById('prog-file').textContent = 'This can take a minute for large backups.';
     try {
-        const result = await pywebview.api.decrypt_database(cryptPath, encryptionKey);
-
+        const result = await pywebview.api.decrypt_database(state.dbPath, state.key);
         if (result.success) {
-            decryptedDBPath = result.decrypted_path;
-            decryptionCompleted = true;
-
-            // Show success UI
-            setTimeout(() => {
-                progressContainer.innerHTML = `
-                    <div class="text-center p-4">
-                        <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-green-600" viewBox="0 0 20 20" fill="currentColor">
-                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                            </svg>
-                        </div>
-                        <h4 class="font-semibold text-green-700 mb-2">Database Decrypted Successfully!</h4>
-                        <p class="text-sm text-text-light mb-4">Your WhatsApp messages are now accessible.</p>
-                        <button class="bg-primary text-white py-2 px-6 rounded text-sm hover:bg-primary-dark" onclick="showStep(4)">
-                            Continue to Contacts →
-                        </button>
-                    </div>
-                `;
-                saveState();
-                autoFillPaths();
-            }, 500);
+            state.decryptDone = true;
+            state.dbPath = result.decrypted_path;
+            state.busy = false;
+            autoFill();
+            saveState();
+            state.step = 3;
+            state.view = 'organize';
+            setStatus('Database decrypted. Choose a folder and organize.', 'ok');
+            render();
+            checkSpace();
         } else {
-            if (decryptText) decryptText.textContent = `✗ Decryption failed: ${result.error}`;
-            btn.disabled = false;
+            onError('Decryption', result.error);
         }
     } catch (error) {
-        if (decryptText) decryptText.textContent = `✗ Error: ${error.message || String(error)}`;
-        btn.disabled = false;
+        onError('Decryption', error.message || String(error));
     }
 }
 
 // ============================================================================
-// STEP 5: ORGANIZE (PYWEBVIEW API INTEGRATION)
+// STEP 3: ORGANIZE
 // ============================================================================
 
-function updateOrganizeButton() {
-    const btn = document.getElementById('organize-btn');
-    const outputPath = document.getElementById('output-path')?.value;
-    if (btn) {
-        btn.disabled = !decryptedDBPath || !mediaPath || !outputPath;
-    }
+async function browseOutputPath() {
+    const result = await pywebview.api.pick_folder();
+    if (!result.success || !result.path) return;
+    state.outputPath = result.path;
+    document.getElementById('output-path').value = result.path;
+    clearStatus();
+    saveState();
+    renderFooter();
+    checkSpace();
 }
 
-async function startOrganization() {
-    const btn = document.getElementById('organize-btn');
-    const progressContainer = document.getElementById('org-progress-container');
-    const orgText = document.getElementById('org-text');
-    const orgPercentage = document.getElementById('org-percentage');
-    const orgBarFill = document.getElementById('org-bar-fill');
-    const outputPathValue = document.getElementById('output-path')?.value;
+async function browseContactsFile() {
+    const result = await pywebview.api.pick_file('contacts');
+    if (!result.success || !result.path) return;
+    state.contactsPath = result.path;
+    document.getElementById('contacts-path').value = result.path;
+    autoFill();
+    saveState();
+}
 
-    if (!btn || !progressContainer || !outputPathValue) return;
-
-    btn.disabled = true;
-    btn.textContent = 'Organizing...';
-    progressContainer.classList.remove('hidden');
-    if (orgText) orgText.textContent = 'Starting organization...\n';
-    if (orgPercentage) orgPercentage.textContent = 'Preparing...';
-    if (orgBarFill) {
-        // Reset to skeleton state
-        orgBarFill.className = 'h-full skeleton transition-all duration-300';
-        orgBarFill.style.width = '100%';
+async function checkSpace() {
+    const info = document.getElementById('space-info');
+    if (!info || !state.mediaPath || !state.outputPath) return;
+    const result = await pywebview.api.check_space(state.mediaPath, state.outputPath);
+    if (!result.success) {
+        info.classList.add('hidden');
+        return;
     }
+    const needed = formatBytes(result.needed);
+    const free = formatBytes(result.free);
+    info.classList.remove('hidden');
+    info.textContent = result.ok
+        ? `Needs about ${needed} · ${free} free`
+        : `⚠ Needs about ${needed}, but only ${free} free. Free up space or pick another folder.`;
+}
 
+async function startOrganize() {
+    beginProgress('Organizing media…');
     try {
         const result = await pywebview.api.start_organization(
-            decryptedDBPath,
-            mediaPath,
-            outputPathValue,
-            contactsFilePath || null
+            state.dbPath,
+            state.mediaPath,
+            state.outputPath,
+            state.contactsPath || null
         );
-
-        if (!result.success) {
-            if (orgText) orgText.textContent += `\n✗ Error: ${result.error}`;
-            btn.disabled = false;
-            btn.textContent = 'Start Organization';
-        }
-        // If successful, the Python monitor will call window.organizerComplete() when done
+        if (!result.success) throw new Error(result.error || 'Organization failed to start');
     } catch (error) {
-        if (orgText) orgText.textContent += `\n✗ Error: ${error.message || String(error)}`;
-        btn.disabled = false;
-        btn.textContent = 'Start Organization';
+        onError('Organization', error.message || String(error));
     }
 }
 
-function cancelOrganization() {
-    try {
-        pywebview.api.cancel_organization();
-    } catch (error) {
-        console.error('Cancel organization error:', error);
-    }
-    const container = document.getElementById('org-progress-container');
-    if (container) container.classList.add('hidden');
-    const btn = document.getElementById('organize-btn');
-    if (btn) {
-        btn.disabled = false;
-        btn.textContent = 'Start Organization';
-    }
+async function openOutputFolder() {
+    if (!state.outputPath) return;
+    const result = await pywebview.api.open_path(state.outputPath);
+    if (!result.success) setStatus(result.error || 'Could not open the folder.', 'err');
 }
 
-function openOutputFolder() {
-    const outputPath = document.getElementById('output-path')?.value;
-    if (outputPath) {
-        // In pywebview this would open the folder
-        alert(`Opening folder: ${outputPath}`);
-    }
-}
+// ============================================================================
+// PROGRESS (driven by events pushed from Python)
+// ============================================================================
 
-// Callback from Python for organization progress
-window.updateOrganizerProgress = (message, percentage) => {
-    const textEl = document.getElementById('org-text');
-    if (textEl) {
-        textEl.textContent += message + '\n';
-        textEl.scrollTop = textEl.scrollHeight;
-    }
-    if (percentage !== undefined && percentage !== null && percentage > 0) {
-        const percentEl = document.getElementById('org-percentage');
-        const barEl = document.getElementById('org-bar-fill');
-        if (percentEl) percentEl.textContent = `${Math.round(percentage)}%`;
-        if (barEl) {
-            // Switch from skeleton to actual progress
-            barEl.classList.remove('skeleton');
-            barEl.classList.add('bg-gradient-to-r', 'from-primary', 'to-success', 'flex', 'items-center', 'pl-2', 'text-xs', 'font-semibold', 'text-white');
-            barEl.style.width = Math.round(percentage) + '%';
-        }
+window.__pyEvent = (event) => {
+    if (!event || !event.name) return;
+    const data = event.data || {};
+    switch (event.name) {
+        case 'backup:start':
+            setProgress(0, data.total);
+            break;
+        case 'backup:file':
+            document.getElementById('prog-file').textContent = data.name || '';
+            break;
+        case 'backup:progress':
+            setProgress(data.current, data.total);
+            break;
+        case 'backup:log':
+            appendLog(data.message);
+            break;
+        case 'backup:complete':
+            onBackupComplete();
+            break;
+        case 'backup:canceled':
+            onCanceled('Backup');
+            break;
+        case 'backup:error':
+            onError('Backup', data.message);
+            break;
+
+        case 'organize:progress':
+            setProgress(data.current, data.total);
+            break;
+        case 'organize:log':
+            appendLog(data.message);
+            break;
+        case 'organize:complete':
+            onOrganizeComplete();
+            break;
+        case 'organize:canceled':
+            onCanceled('Organization');
+            break;
+        case 'organize:error':
+            onError('Organization', data.message);
+            break;
     }
 };
 
-// Callback from Python when organization completes
-window.organizerComplete = () => {
-    const progressContainer = document.getElementById('org-progress-container');
-    const outputPath = document.getElementById('output-path')?.value;
-    if (!progressContainer) return;
+function beginProgress(title) {
+    state.busy = true;
+    state.canceled = false;
+    state.opStart = Date.now();
+    state.view = 'progress';
+    render();
+    document.getElementById('prog-title').textContent = title;
+    document.getElementById('prog-percent').textContent = '…';
+    document.getElementById('prog-file').textContent = '';
+    document.getElementById('prog-eta').textContent = '';
+    document.getElementById('prog-log').textContent = '';
+    document.getElementById('prog-bar').style.width = '0%';
+}
 
-    progressContainer.innerHTML = `
-        <div class="text-center p-4">
-            <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8 text-green-600" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
-                </svg>
-            </div>
-            <h4 class="font-semibold text-green-700 mb-2">Media Organized Successfully!</h4>
-            <p class="text-sm text-text-light mb-4">Files saved to: ${outputPath}</p>
-            <div class="flex gap-2">
-                <button class="flex-1 bg-primary text-white py-2 px-4 rounded text-sm hover:bg-primary-dark" onclick="showStep(1)">
-                    Start Over
-                </button>
-                <button class="flex-1 bg-card text-primary border border-primary py-2 px-4 rounded text-sm hover:bg-[#f0f5f4]" onclick="openOutputFolder()">
-                    Open Folder
-                </button>
-            </div>
-        </div>
-    `;
+function setProgress(current, total) {
+    const safeTotal = total || 0;
+    const pct = safeTotal > 0 ? Math.max(0, Math.min(100, Math.round((current / safeTotal) * 100))) : 0;
+    document.getElementById('prog-percent').textContent = safeTotal > 0 ? `${pct}%` : '…';
+    document.getElementById('prog-bar').style.width = `${pct}%`;
 
+    const elapsed = (Date.now() - state.opStart) / 1000;
+    const rate = current > 0 ? current / elapsed : 0;
+    const remaining = rate > 0 ? (safeTotal - current) / rate : Infinity;
+    document.getElementById('prog-eta').textContent =
+        remaining >= 5 && remaining < 600 ? `About ${formatDuration(remaining)} remaining` : '';
+}
+
+function appendLog(line) {
+    const el = document.getElementById('prog-log');
+    if (!el || !line) return;
+    el.textContent += line + '\n';
+    el.scrollTop = el.scrollHeight;
+}
+
+function cancelOp() {
+    if (state.view !== 'progress') return;
+    state.canceled = true;
+    appendLog('Canceling…');
+    if (state.step === 1) pywebview.api.cancel_backup();
+    else if (state.step === 3) pywebview.api.cancel_organization();
+}
+
+function onOrganizeComplete() {
+    state.busy = false;
+    document.getElementById('done-path').textContent = state.outputPath;
+    state.view = 'done';
+    clearStatus();
     saveState();
-};
+    render();
+}
 
-// Callback from Python when organization is canceled
-window.organizerCanceled = () => {
-    const textEl = document.getElementById('org-text');
-    if (textEl) {
-        textEl.textContent += '\n⚠ Organization canceled';
-    }
-    const btn = document.getElementById('organize-btn');
-    if (btn) {
-        btn.disabled = false;
-        btn.textContent = 'Start Organization';
-    }
-};
+function onCanceled(what) {
+    state.busy = false;
+    state.step = 1;
+    state.view = 'backup';
+    setStatus(`${what} canceled.`, 'warn');
+    render();
+}
 
-// ============================================================================
-// AUTO-FILL PATHS
-// ============================================================================
-
-function autoFillPaths() {
-    // Page 3 (Decrypt) - auto-fill if backup completed
-    if (backupCompleted && backupPath) {
-        const cryptPath = `${backupPath}/Databases/msgstore.db.crypt15`;
-        const cryptInput = document.getElementById('crypt-db-path');
-        if (cryptInput && !cryptInput.value) {
-            cryptInput.value = cryptPath;
-        }
-        const noteEl = document.getElementById('db-auto-note');
-        if (noteEl) noteEl.textContent = "Auto-filled from backup";
-    }
-
-    // Page 5 (Organize) - auto-fill all paths
-    if (backupPath) {
-        // Output path
-        const outputInput = document.getElementById('output-path');
-        if (outputInput && !outputInput.value) {
-            outputInput.value = `${backupPath}/Organized_Media`;
-        }
-
-        // Auto-fill source paths display
-        const mediaPathEl = document.getElementById('auto-media-path');
-        const dbPathEl = document.getElementById('auto-db-path');
-        const contactsPathEl = document.getElementById('auto-contacts-path');
-
-        if (backupCompleted && mediaPathEl) {
-            mediaPathEl.textContent = `Media: ${mediaPath || backupPath + '/Media'}`;
-        }
-
-        if (decryptedDBPath && dbPathEl) {
-            dbPathEl.textContent = `Database: ${decryptedDBPath}`;
-        } else if (decryptionCompleted && dbPathEl) {
-            dbPathEl.textContent = `Database: ${backupPath}/msgstore.db`;
-        }
-
-        if (contactsFilePath && contactsPathEl) {
-            contactsPathEl.textContent = `Contacts: ${contactsFilePath}`;
-        } else if (contactsPathEl) {
-            contactsPathEl.textContent = "Contacts: None (folders will use phone numbers)";
-        }
-
-        // Update organize button state
-        updateOrganizeButton();
-    }
+function onError(what, message) {
+    state.busy = false;
+    state.step = 1;
+    state.view = 'backup';
+    setStatus(`${what} failed: ${message}`, 'err');
+    render();
 }
 
 // ============================================================================
-// STATE MANAGEMENT
+// SHARED
 // ============================================================================
+
+function formatBytes(bytes) {
+    if (!bytes) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    return `${(bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+}
+
+function formatDuration(seconds) {
+    if (!isFinite(seconds) || seconds < 0) return '';
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    const m = Math.floor(seconds / 60);
+    return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+function autoFill() {
+    const dbEl = document.getElementById('auto-db-path');
+    const mediaEl = document.getElementById('auto-media-path');
+    const contactsEl = document.getElementById('auto-contacts-path');
+    if (dbEl) {
+        dbEl.textContent = state.decryptDone
+            ? `Database: ${state.dbPath}`
+            : 'Database: waiting for decryption';
+    }
+    if (mediaEl) {
+        mediaEl.textContent = state.backupDone
+            ? `Media: ${state.mediaPath}`
+            : 'Media: waiting for backup';
+    }
+    if (contactsEl) {
+        contactsEl.textContent = state.contactsPath
+            ? `Contacts: ${state.contactsPath}`
+            : 'Contacts: none — folders use phone numbers';
+    }
+    renderFooter();
+}
 
 function saveState() {
-    const state = {
-        backupPath: backupPath,
-        backupCompleted: backupCompleted,
-        decryptedDBPath: decryptedDBPath,
-        decryptionCompleted: decryptionCompleted,
-        contactsFilePath: contactsFilePath,
-        mediaPath: mediaPath,
-        currentStep: currentStep
-    };
-    localStorage.setItem('whatsappMediaSuiteState', JSON.stringify(state));
+    localStorage.setItem('whatsappMediaSuiteState', JSON.stringify({
+        backupPath: state.backupPath,
+        mediaPath: state.mediaPath,
+        dbPath: state.dbPath,
+        outputPath: state.outputPath,
+        contactsPath: state.contactsPath,
+        backupDone: state.backupDone,
+        decryptDone: state.decryptDone,
+    }));
 }
 
-function loadSavedState() {
-    const savedState = localStorage.getItem('whatsappMediaSuiteState');
-    if (savedState) {
-        try {
-            const state = JSON.parse(savedState);
-            backupPath = state.backupPath || '';
-            backupCompleted = state.backupCompleted || false;
-            decryptedDBPath = state.decryptedDBPath || '';
-            decryptionCompleted = state.decryptionCompleted || false;
-            contactsFilePath = state.contactsFilePath || '';
-            mediaPath = state.mediaPath || '';
-            currentStep = state.currentStep || 1;
+function restoreState() {
+    const raw = localStorage.getItem('whatsappMediaSuiteState');
+    if (!raw) return;
+    try {
+        const s = JSON.parse(raw);
+        Object.assign(state, {
+            backupPath: s.backupPath || '',
+            mediaPath: s.mediaPath || '',
+            dbPath: s.dbPath || '',
+            outputPath: s.outputPath || '',
+            contactsPath: s.contactsPath || '',
+            backupDone: s.backupDone || false,
+            decryptDone: s.decryptDone || false,
+        });
+        const set = (id, value) => {
+            const el = document.getElementById(id);
+            if (el && value) el.value = value;
+        };
+        set('backup-path', state.backupPath);
+        set('crypt-db-path', state.dbPath);
+        set('output-path', state.outputPath);
+        set('contacts-path', state.contactsPath);
 
-            // Update UI with saved state
-            const backupInput = document.getElementById('backup-path');
-            if (backupPath && backupInput) {
-                backupInput.value = backupPath;
-            }
-            const contactsInput = document.getElementById('contacts-path');
-            if (contactsFilePath && contactsInput) {
-                contactsInput.value = contactsFilePath;
-            }
-
-            // Show appropriate step
-            showStep(currentStep);
-        } catch (error) {
-            console.error('Error loading saved state:', error);
-        }
+        state.step = state.decryptDone ? 3 : state.backupDone ? 2 : 1;
+        state.view = STEP_VIEW[state.step - 1];
+        autoFill();
+    } catch (error) {
+        console.error('Error restoring state:', error);
     }
+}
+
+function startOver() {
+    Object.assign(state, {
+        step: 1, view: 'backup', busy: false, canceled: false,
+        backupPath: '', mediaPath: '', dbPath: '', outputPath: '', contactsPath: '',
+        key: '', device: '', backend: '', backupDone: false, decryptDone: false,
+    });
+    ['backup-path', 'crypt-db-path', 'output-path', 'contacts-path', 'encryption-key']
+        .forEach((id) => { const el = document.getElementById(id); if (el) el.value = ''; });
+    document.getElementById('key-count').textContent = '0';
+    document.getElementById('key-valid').classList.add('hidden');
+    document.getElementById('space-info').classList.add('hidden');
+    localStorage.removeItem('whatsappMediaSuiteState');
+    clearStatus();
+    autoFill();
+    render();
+}
+
+async function exportDiagnostics() {
+    const result = await pywebview.api.export_diagnostics();
+    setStatus(
+        result.success ? `Diagnostics saved to ${result.path}` : `Couldn't export diagnostics: ${result.error}`,
+        result.success ? 'info' : 'err'
+    );
 }
